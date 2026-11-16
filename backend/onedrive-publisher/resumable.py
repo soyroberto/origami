@@ -16,8 +16,10 @@ import time
 import uuid
 
 from auth import silent_token
-from config import MANAGED_PATH, TYPES, PublisherError, content_version, manifest, photo_path
+from config import (HEIF_TYPES, MANAGED_PATH, SOURCE_TYPES, TYPES, PublisherError,
+                    content_version, manifest, photo_path, public_extension, source_mime_allowed)
 from graph import MAX_BYTES
+from image_conversion import web_content
 from paged_graph import PagedGraph
 from sync import commit_publication, recover_publication
 
@@ -29,13 +31,14 @@ _JOB_FIELDS = {"id", "root", "phase", "scan_refs", "next_cursor", "entrycount",
                "pagecount", "candidatecount", "copy_page", "copy_offset", "copy_refs",
                "intent_ref", "retry_at", "skipped"}
 _SKIP = {"remote", "folder", "nonfile", "heic", "heif", "tif", "tiff", "svg", "other", "mime", "oversize"}
-_COPY_SKIP = {"invalid_raster_signature"}
+_COPY_SKIP = {"invalid_raster_signature", "invalid_heif_image", "heif_pixel_bound", "converted_size_bound"}
 _FATAL = {"duplicate_item_during_scan", "pagination_bound", "item_bound", "page_bound",
           "incomplete_page", "unsafe_graph_cursor", "invalid_nextlink", "invalid_graph_item",
           "invalid_graph_root", "invalid_graph_id", "source_not_owned_folder",
           "download_race_before", "download_race_after", "download_item_changed",
           "download_item_outside_root", "invalid_raster_signature", "file_size_bound",
-          "missing_item_version", "invalid_item_version", "source_ancestry_changed", "folder_bound"}
+          "missing_item_version", "invalid_item_version", "source_ancestry_changed", "folder_bound",
+          "invalid_heif_image", "heif_pixel_bound", "converted_size_bound"}
 _DEFER = {"engine_deadline", "scan_deadline", "retry_budget"}
 # Reserve bounded writes/checkpoints inside the integral 180s invocation budget.
 _CHECKPOINT_RESERVE = 10
@@ -226,9 +229,9 @@ def _page(page, root, recursive=None):
             PagedGraph._identifier(row["parent_id"])
         _require(row["id"] in ids and row["id"] not in rows, "duplicate_item_during_scan")
         rows.add(row["id"])
-        _require(row["ext"] in TYPES and isinstance(row["file"], dict) and
+        _require(row["ext"] in SOURCE_TYPES and isinstance(row["file"], dict) and
                  set(row["file"]) == {"mimeType"} and
-                 row["file"]["mimeType"] in (TYPES[row["ext"]], "application/octet-stream"),
+                 source_mime_allowed(row["ext"], row["file"]["mimeType"]),
                  "invalid_graph_item")
         _integer(row["size"], MAX_BYTES, "file_size_bound")
         _require(all(tag is None or isinstance(tag, str) and len(tag) <= 4096
@@ -285,11 +288,13 @@ def _slice(pages, start, count):
     return result, [p, offset]
 
 
-def _record(row, library_id, digest=None):
+def _record(row, library_id, digest=None, output_bytes=None):
     version = content_version(row)
     return {"id": row["id"], "version": version,
             "path": photo_path(library_id, row["id"], version, row["ext"]),
-            "bytes": row["size"], "sha256": digest}
+            # Converted size is unknown until encoding; original row size stays
+            # in the scan journal and is still validated by Graph's download.
+            "bytes": output_bytes if row["ext"] in HEIF_TYPES else row["size"], "sha256": digest}
 
 
 def _records(records, library_id):
@@ -303,7 +308,10 @@ def _records(records, library_id):
                  isinstance(rec["path"], str) and MANAGED_PATH.fullmatch(rec["path"]), "invalid_private_ledger")
         ext = rec["path"].rsplit(".", 1)[1]
         _require(rec["path"] == photo_path(library_id, rec["id"], rec["version"], ext), "invalid_private_ledger")
-        _integer(rec["bytes"], MAX_BYTES, "invalid_private_ledger")
+        if rec["bytes"] is None:
+            _require(rec["sha256"] is None, "invalid_private_ledger")
+        else:
+            _integer(rec["bytes"], MAX_BYTES, "invalid_private_ledger")
         _require(rec["sha256"] is None or isinstance(rec["sha256"], str) and _HEX.fullmatch(rec["sha256"]),
                  "invalid_private_ledger")
         if "skip" in rec:
@@ -323,7 +331,7 @@ def _batch_payload(payload, pages, library_id, allow_skips=False):
     for row, rec in zip(rows, records):
         if "parent_id" in row:
             PagedGraph._identifier(row["parent_id"])
-        expected = _record(row, library_id, rec["sha256"])
+        expected = _record(row, library_id, rec["sha256"], rec["bytes"])
         if "skip" in rec:
             _require(allow_skips, "invalid_private_ledger")
             expected["skip"] = rec["skip"]
@@ -800,6 +808,8 @@ def run_resumable(store, config, start_new=True, deadline=None, graph_factory=Pa
                         if info is not None:
                             _require((known and known["version"] == rec["version"]) or owned,
                                      "foreign_copy_collision")
+                            if rec["bytes"] is None:
+                                rec["bytes"] = info["bytes"]
                             _require(info["bytes"] == rec["bytes"], "foreign_copy_collision")
                             if owned and owned["sha256"] is not None:
                                 _require(info["sha256"] == owned["sha256"], "foreign_copy_collision")
@@ -824,6 +834,8 @@ def run_resumable(store, config, start_new=True, deadline=None, graph_factory=Pa
                     info = inventory.get(rec["path"])
                     known = published_proof.get(rec["path"])
                     if info is not None and known and known["version"] == rec["version"]:
+                        if rec["bytes"] is None:
+                            rec["bytes"] = info["bytes"]
                         _require(info["bytes"] == rec["bytes"], "foreign_copy_collision")
                         rec["sha256"] = info["sha256"]
                     elif info is not None and rec["sha256"] is not None:
@@ -844,6 +856,8 @@ def run_resumable(store, config, start_new=True, deadline=None, graph_factory=Pa
                             # this validated durable row parent and fresh ancestry.
                             graph.expected_parent = row.get("parent_id", root["id"])
                             content = graph.download(row, row["ext"])
+                            _require(isinstance(content, bytes) and len(content) == row["size"], "download_item_changed")
+                            content = web_content(content, row["ext"])
                         except PublisherError as exc:
                             if (not getattr(config, "skip_invalid", False) or
                                     str(exc) not in _COPY_SKIP or info is not None):
@@ -853,13 +867,15 @@ def run_resumable(store, config, start_new=True, deadline=None, graph_factory=Pa
                             pending.append(rec)
                             position = cursor = next_position
                             continue
+                        if row["ext"] in HEIF_TYPES:
+                            rec["bytes"] = len(content)
                         _require(isinstance(content, bytes) and len(content) == rec["bytes"], "download_item_changed")
                         rec["sha256"] = hashlib.sha256(content).hexdigest()
                         check()
                         if info is not None:
                             _require(info == {"bytes": len(content), "sha256": rec["sha256"]}, "foreign_copy_collision")
                         else:
-                            store.upload_original(rec["path"], content, TYPES[row["ext"]], rec["sha256"])
+                            store.upload_original(rec["path"], content, TYPES[public_extension(row["ext"])], rec["sha256"])
                             inventory[rec["path"]] = {"bytes": len(content), "sha256": rec["sha256"]}
                     pending.append(rec)
                     position = next_position

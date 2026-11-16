@@ -11,6 +11,19 @@ LIBRARY_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,47}\Z")
 MANAGED_PATH = re.compile(r"photos/onedrive/[a-z0-9][a-z0-9_-]{0,47}/[a-f0-9]{64}\.(jpg|jpeg|png|webp|gif|avif)\Z")
 TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
          "webp": "image/webp", "gif": "image/gif", "avif": "image/avif"}
+HEIF_TYPES = {"heic": "image/heic", "heif": "image/heif"}
+SOURCE_TYPES = {**TYPES, **HEIF_TYPES}
+
+
+def public_extension(ext):
+    return "jpg" if ext in HEIF_TYPES else ext
+
+
+def source_mime_allowed(ext, mime):
+    if ext in HEIF_TYPES:
+        return mime in ("image/heic", "image/heif", "image/heic-sequence",
+                        "image/heif-sequence", "application/octet-stream")
+    return ext in TYPES and mime in (TYPES[ext], "application/octet-stream")
 
 
 class PublisherError(Exception):
@@ -115,6 +128,7 @@ def content_version(item):
 
 
 def photo_path(library_id, item_id, version, ext):
+    ext = public_extension(ext)
     if not LIBRARY_ID.fullmatch(library_id) or ext not in TYPES:
         raise PublisherError("unsafe_photo_path")
     digest = hashlib.sha256(json.dumps([library_id, item_id, version], separators=(",", ":")).encode()).hexdigest()

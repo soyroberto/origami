@@ -7,8 +7,9 @@ import copy
 import logging
 
 from auth import silent_token
-from config import PublisherError, TYPES, content_version, manifest, photo_path
+from config import PublisherError, TYPES, content_version, manifest, photo_path, public_extension
 from graph import GraphClient
+from image_conversion import web_content
 
 LOG = logging.getLogger("onedrive_publisher")
 
@@ -82,12 +83,13 @@ def sync_locked(store, state, config, graph_factory=GraphClient):
                     reusable = previous and previous["version"] == version and previous["path"] == path
                     if not reusable or not store.exists(path):
                         content = graph.download(row, ext)
+                        content = web_content(content, ext)
                         if path not in state["managed"]:
                             if store.exists(path):
                                 raise PublisherError("foreign_copy_collision")
                             state["managed"].append(path)
                             store.save(state)  # Upload intent survives upload or later scan failure.
-                        store.upload(path, content, TYPES[ext])
+                        store.upload(path, content, TYPES[public_extension(ext)])
                     items[row["id"]] = {"path": path, "version": version}
                 target[lib.id] = {"items": items, "source_path": lib.path, "recursive": lib.recursive, "skipped": skipped}
                 summary[lib.id] = {"images": len(items), "skipped": skipped}

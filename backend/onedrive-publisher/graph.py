@@ -6,7 +6,7 @@ import time
 from urllib.parse import quote, urlsplit
 
 import requests
-from config import PublisherError, TYPES, content_version, encoded_path
+from config import PublisherError, SOURCE_TYPES, content_version, encoded_path, source_mime_allowed
 
 GRAPH = "https://graph.microsoft.com/v1.0"
 MAX_ITEMS = 10000
@@ -165,12 +165,12 @@ class GraphClient:
                         continue
                     name = row.get("name", "")
                     ext = name.rsplit(".", 1)[-1].lower() if isinstance(name, str) and "." in name else "unknown"
-                    if ext not in TYPES:
+                    if ext not in SOURCE_TYPES:
                         label = ext if ext in ("heic", "heif", "tif", "tiff", "svg") else "other"
                         skipped[label] = skipped.get(label, 0) + 1
                         continue
                     mime = row["file"].get("mimeType", "application/octet-stream")
-                    if mime not in (TYPES[ext], "application/octet-stream"):
+                    if not source_mime_allowed(ext, mime):
                         skipped["mime"] = skipped.get("mime", 0) + 1
                         continue
                     if not isinstance(row.get("size"), int) or row["size"] < 0 or row["size"] > MAX_BYTES:
@@ -227,6 +227,14 @@ def raster_signature(data, ext):
         return data.startswith((b"GIF87a", b"GIF89a"))
     if ext == "webp":
         return data.startswith(b"RIFF") and data[8:12] == b"WEBP"
+    if ext in ("heic", "heif"):
+        if len(data) < 16 or data[4:8] != b"ftyp":
+            return False
+        size = int.from_bytes(data[:4], "big")
+        if size < 16 or size > len(data):
+            return False
+        brands = {data[8:12]} | {data[i:i + 4] for i in range(16, min(size, 256), 4)}
+        return bool(brands & {b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1"})
     if ext == "avif":
         if len(data) < 16 or data[4:8] != b"ftyp":
             return False

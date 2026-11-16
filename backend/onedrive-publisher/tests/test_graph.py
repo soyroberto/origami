@@ -75,13 +75,13 @@ def test_recursion_is_explicit(recursive, count):
 
 
 def test_unsupported_rasters_svg_remote_and_mime_skipped_with_counts():
-    rows = [item(str(i), name="private." + ext) for i, ext in enumerate(["HEIC", "TIFF", "SVG", "tif", "jpeg"])]
+    rows = [item(str(i), name="private." + ext) for i, ext in enumerate(["BMP", "TIFF", "SVG", "tif", "jpeg"])]
     rows[-1]["file"]["mimeType"] = "image/svg+xml"
     rows.append({"id": "remote", "folder": {}, "remoteItem": {}})
     g = client([response({"id": "folder", "folder": {}}), response({"value": rows})])
     result, skipped = g.scan(Library("safe", "Fotos", recursive=True))
     assert not result
-    assert skipped == {"heic": 1, "tiff": 1, "svg": 1, "tif": 1, "mime": 1, "remote": 1}
+    assert skipped == {"other": 1, "tiff": 1, "svg": 1, "tif": 1, "mime": 1, "remote": 1}
 
 
 def test_original_download_has_no_authorization_and_stays_unchanged():

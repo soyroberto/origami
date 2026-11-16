@@ -1,6 +1,8 @@
-# Public PyPI metadata verified 2026-11-06. Functions 2.x SDK requires Python 3.13.
+# Existing SDK versions retained; deployed runtime is Python 3.12 (2026-11-16).
 azure-functions==1.26.0
 azure-identity==1.27.0
 azure-storage-blob==12.31.1
 msal==1.39.0
 requests==2.34.2
+Pillow==13.0.0
+pillow-heif==1.8.1

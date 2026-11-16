@@ -126,7 +126,7 @@ def test_scan_page_sanitizes_every_persistible_field_and_counts_all_entries():
     result = graph.scan_page(ROOT)
     assert result == {"rows": [minimal()], "ids": [row["id"] for row in rows],
                       "next": None, "entries": 8,
-                      "skipped": {"heic": 1, "svg": 1, "mime": 1, "folder": 1,
+                      "skipped": {"svg": 1, "mime": 2, "folder": 1,
                                   "remote": 1, "nonfile": 1, "other": 1}}
     serialized = json.dumps(result)
     assert all(secret not in serialized for secret in ("private", "downloadUrl", "hidden", "hashes", "name"))

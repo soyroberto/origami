@@ -14,7 +14,7 @@ import re
 import time
 from urllib.parse import quote, unquote, urlsplit
 
-from config import PublisherError, TYPES, content_version, encoded_path
+from config import PublisherError, SOURCE_TYPES, content_version, encoded_path, source_mime_allowed
 from graph import GRAPH, MAX_BYTES, GraphClient
 
 PAGE_SIZE = 200
@@ -294,13 +294,13 @@ class PagedGraph(GraphClient):
             if not isinstance(file, dict) or not isinstance(name, str):
                 raise PublisherError("invalid_graph_item")
             ext = name.rsplit(".", 1)[-1].lower() if "." in name else "unknown"
-            if ext not in TYPES:
+            if ext not in SOURCE_TYPES:
                 skip(ext if ext in ("heic", "heif", "tif", "tiff", "svg") else "other")
                 continue
             mime = file.get("mimeType", "application/octet-stream")
             if not isinstance(mime, str):
                 raise PublisherError("invalid_graph_item")
-            if mime not in (TYPES[ext], "application/octet-stream"):
+            if not source_mime_allowed(ext, mime):
                 skip("mime")
                 continue
             size = source.get("size")
