@@ -16,3 +16,4 @@ local.settings*.json
 __pycache__/
 *.pyc
 msal-cache.json
+node_modules/

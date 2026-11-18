@@ -17,6 +17,8 @@ from pathlib import Path
 REQUIRED_FILES = frozenset(
     {
         "index.html",
+        "version.js",
+        "acercade.html",
         "jquery-1.8.3.js",
         "less-2.5.1.min.js",
         "album-queue.js",

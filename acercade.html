@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Acerca de Origami, una galería animada de fotos de OneDrive.">
+  <title>Acerca de Origami</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111315;
+      color: #eef0f2;
+      line-height: 1.65;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main {
+      width: min(100%, 48rem);
+      margin: 0 auto;
+      padding: clamp(2rem, 8vw, 5rem) clamp(1.25rem, 5vw, 3rem);
+    }
+    .eyebrow {
+      margin: 0 0 .5rem;
+      color: #b3b9c1;
+      font-size: .875rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 0; font-size: clamp(2.25rem, 8vw, 3.5rem); line-height: 1.15; }
+    h2 { margin: 0 0 .75rem; font-size: 1.25rem; line-height: 1.35; }
+    p { margin: 0 0 1rem; }
+    .version { margin: .75rem 0 2rem; color: #b3b9c1; }
+    section { margin-top: 2rem; }
+    a { color: #a9d2f5; text-underline-offset: .2em; overflow-wrap: anywhere; }
+    a:hover { color: #d5eaff; }
+    a:focus-visible { outline: 2px solid #a9d2f5; outline-offset: 5px; border-radius: 2px; }
+    ul { margin: 0; padding-left: 1.25rem; }
+    li + li { margin-top: .75rem; }
+    footer { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid #34393f; }
+  </style>
+</head>
+<body>
+  <main id="contenido" aria-labelledby="titulo">
+    <header>
+      <p class="eyebrow">Acerca de</p>
+      <h1 id="titulo"><span id="product-name">Origami</span> <span id="display-version"></span></h1>
+      <p class="version">Versión completa: <span id="full-version">No disponible</span></p>
+    </header>
+
+    <section aria-labelledby="descripcion">
+      <h2 id="descripcion">Una galería en movimiento</h2>
+      <p>Origami es una galería animada de fotos de OneDrive. Muestra ocho fotos a la vez, mantiene las bibliotecas separadas y convierte las imágenes HEIC para mostrarlas en el navegador.</p>
+    </section>
+
+    <section aria-labelledby="proyecto">
+      <h2 id="proyecto">El proyecto</h2>
+      <nav aria-label="Enlaces del proyecto">
+        <ul>
+          <li><a href="https://github.com/soyroberto/origami">Código de Origami en GitHub</a></li>
+          <li><a href="https://github.com/soyroberto/origami/releases">Versiones publicadas</a></li>
+        </ul>
+      </nav>
+    </section>
+
+    <section aria-labelledby="creditos">
+      <h2 id="creditos">Inspiración y créditos</h2>
+      <p>La animación se basa en la <a href="https://hermanbanken.github.io/shiftingtiles/">implementación original de Shifting Tiles</a>.</p>
+      <p>El protector de pantalla Shifting Tiles de macOS es la inspiración visual. Origami no está afiliado con Apple.</p>
+    </section>
+
+    <noscript><p>Activa JavaScript para consultar la versión de Origami. El resto de esta página se puede leer sin JavaScript.</p></noscript>
+
+    <footer>
+      <a href="https://saauxfotos.z26.web.core.windows.net/">Volver a la galería</a>
+    </footer>
+  </main>
+
+  <script src="/version.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var release = window.OrigamiVersion;
+      if (!release || typeof release.name !== 'string' || typeof release.version !== 'string') {
+        return;
+      }
+      var displayVersion = release.version.split('.').slice(0, 2).join('.');
+      document.getElementById('product-name').textContent = release.name;
+      document.getElementById('display-version').textContent = displayVersion;
+      document.getElementById('full-version').textContent = release.version;
+      document.title = release.name + ' ' + displayVersion + ' — Acerca de';
+    }());
+  </script>
+</body>
+</html>

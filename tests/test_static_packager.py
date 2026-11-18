@@ -24,7 +24,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('gallery-source.js', selected)
         with self.assertRaises(ValueError):
             packager.select_files(tracked - {'gallery-source.js'})
-        for module in ('album-queue.js', 'gallery-layout.js', 'gallery-player.js'):
+        for module in ('album-queue.js', 'gallery-layout.js', 'gallery-player.js', 'version.js', 'acercade.html'):
             self.assertIn(module, selected)
             with self.assertRaises(ValueError):
                 packager.select_files(tracked - {module})
