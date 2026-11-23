@@ -26,7 +26,6 @@ REQUIRED_FILES = frozenset(
         "gallery-source.js",
         "gallery-layout.js",
         "gallery-player.js",
-        "gallery-aligned-playback.js",
         "shiftingtiles.less",
     }
 )

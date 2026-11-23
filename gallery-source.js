@@ -199,8 +199,6 @@
           initialized = true;
           var playbackOptions = { fallbackPhotos: fallback.slice() };
           if (config.dynamicRows) playbackOptions.dynamicRows = config.dynamicRows;
-          if (config.adaptiveLayout) playbackOptions.adaptiveLayout = config.adaptiveLayout;
-          if (config.alignedLayout) playbackOptions.alignedLayout = config.alignedLayout;
           $gallery.shiftingtiles(images.slice(), playbackOptions);
         } else {
           // Replace the photo source in-place; do not duplicate animation timers/events.

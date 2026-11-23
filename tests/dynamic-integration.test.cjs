@@ -6,7 +6,7 @@ const path = require('node:path');
 const {JSDOM} = require('jsdom');
 const ROOT = path.resolve(__dirname, '..');
 
-function fixture(options = {}) {
+function fixture() {
   const dom = new JSDOM('<!doctype html><body><div class="gallery"></div></body>', {url:'https://example.test/',runScripts:'outside-only',pretendToBeVisual:true});
   const w = dom.window;
   w.eval(fs.readFileSync(path.join(ROOT,'jquery-1.8.3.js'),'utf8'));
@@ -27,7 +27,7 @@ function fixture(options = {}) {
     if(this === row) return {width:2*W,height};
     const group = this.parentElement && this.parentElement.classList.contains('dual') ? this.parentElement : this;
     const width = 2*W*parseFloat(group.style.getPropertyValue('--st-box-width') || (group.classList.contains('dual')?'10':'20'))/100;
-    if(group !== this) return {width:width-4,height:(height-4)*parseFloat(this.style.height || '50')/100};
+    if(group !== this) return {width:width-10,height:(height-10)*parseFloat(this.style.height || '50')/100};
     return {width,height};
   };
   w.Math.random = () => 0.999999;
@@ -36,7 +36,7 @@ function fixture(options = {}) {
   w.ShiftingTilesLayout.plan = function(...args){planCalls++;return plan(...args);};
   const controller = w.ShiftingTilesPlayer.attach(gallery);
   const source = Array.from({length:40},(_,i)=>'photos/album/p'+i+'.jpg');
-  gallery.shiftingtiles(source,Object.assign({dynamicRows:{enabled:true,probability:1,minTransitionsBetweenChanges:0}, adaptiveLayout:{enabled:false}},options));
+  gallery.shiftingtiles(source,{dynamicRows:{enabled:true,probability:1,minTransitionsBetweenChanges:0}});
   const playback = gallery.data('shiftingtiles-playback');
   return {dom,w,$,gallery,requests,rafs,timers,controller,playback,source,plans:()=>planCalls,
     ready(){requests.slice().forEach(r=>{if(r.onload)r.onload();});},
@@ -80,54 +80,5 @@ test('actual structural preload failure resumes a pending resize without a succe
     assert.deepEqual(Array.from(f.playback.stats().rowPhotoCounts),[4,4]);
     assert.equal(f.requests.length,n+2,'resize must not request more images');
     assert.equal([...f.timers.values()].filter(t=>t.ms===5000).length,1);
-  } finally {f.close();}
-});
-
-test('actual local fit without structural change preserves node identity through resize and a new source resets it', () => {
-  const f = fixture({dynamicRows:{enabled:false},adaptiveLayout:{enabled:true,minGain:0.02,maxNeighbors:1}});
-  try {
-    f.ready(); f.flush(); assert.equal(f.plans(),1);
-    const boxes=f.gallery.children('.row').children('.single,.dual'), outgoing=boxes.filter('.single').first();
-    assert.ok(outgoing.length);
-    const row=outgoing.parent(), groups=row.children('.single,.dual');
-    groups.each(function(){
-      const fraction=this===outgoing[0] ? 0.8 : 0.2/(groups.length-1);
-      this.style.setProperty('--st-box-width',fraction*50+'%');
-      this.style.setProperty('--st-start-width',fraction*50+'%');
-    });
-    const index=boxes.toArray().indexOf(outgoing[0]), n=f.requests.length;
-    f.w.Math.random=()=>(index+0.01)/boxes.length;
-    assert.equal(f.playback.frame(),true); assert.equal(f.requests.length,n+1);
-    f.requests[n].naturalWidth=500; f.requests[n].naturalHeight=1000; f.requests[n].onload();
-    assert.equal(f.playback.stats().structureChanges,0); assert.equal(f.playback.stats().localFits,1);
-    assert.ok(f.gallery.hasClass('gallery-fitting'));
-    f.flush(); assert.equal(f.plans(),1,'local fits never call global plan');
-    f.gallery.find('.disappear').trigger('animationend'); f.flush();
-    assert.ok(!f.gallery.hasClass('gallery-fitting')); assert.equal(f.plans(),1);
-    const nodes=f.gallery.children('.row').children().toArray();
-    f.resize(1024,768); f.flush(); assert.equal(f.plans(),2);
-    assert.equal(f.controller.metrics().diagnostics.partitions,0);
-    assert.equal(f.controller.metrics().rearranged,false);
-    assert.deepEqual(f.gallery.children('.row').children().toArray(),nodes);
-    const source=f.source.map(url=>url.replace('album','replacement'));
-    f.gallery.trigger('st-photos-update',[source]); f.ready(); f.flush();
-    assert.equal(f.plans(),3); assert.ok(f.controller.metrics().diagnostics.partitions>0,'fresh source runs its initial optimizer');
-    assert.equal([...f.timers.values()].filter(t=>t.ms===5000).length,1);
-  } finally {f.close();}
-});
-
-test('actual adaptive preload cancellation resumes pending resize without committing either reservation', () => {
-  const f=fixture({adaptiveLayout:{enabled:true,minGain:0.02,maxNeighbors:1}});
-  try {
-    f.ready();f.flush();assert.equal(f.plans(),1);
-    const before=Array.from(f.playback.stats().visibleURLs),n=f.requests.length;
-    f.split();assert.equal(f.requests.length,n+2);
-    f.resize(1200,900);f.flush();assert.equal(f.plans(),1);
-    f.requests[n].onload();f.requests[n+1].onerror();
-    assert.equal(f.playback.stats().reservedCount,0);assert.equal(f.playback.stats().loading,false);
-    assert.equal(f.playback.stats().seenCount,8);assert.equal(f.playback.stats().localFits,0);
-    f.flush();assert.equal(f.plans(),2);assert.equal(f.controller.metrics().width,1200);
-    assert.deepEqual(new Set(f.playback.stats().visibleURLs),new Set(before));
-    assert.equal(f.requests.length,n+2);assert.equal([...f.timers.values()].filter(t=>t.ms===5000).length,1);
   } finally {f.close();}
 });

@@ -8,9 +8,9 @@ const source = fs.readFileSync(path.join(ROOT, 'version.js'), 'utf8');
 
 test('version is defined once and available to Node', () => {
   const app = require('../version.js');
-  assert.deepEqual(app, { name: 'Origami', version: '0.9.3' });
+  assert.deepEqual(app, { name: 'Origami', version: '0.9.1' });
   assert.ok(Object.isFrozen(app));
-  assert.equal((source.match(/0\.9\.3/g) || []).length, 1);
+  assert.equal((source.match(/0\.9\.1/g) || []).length, 1);
 });
 
 test('browser receives only hidden metadata, never links or visible controls', () => {
@@ -19,13 +19,13 @@ test('browser receives only hidden metadata, never links or visible controls', (
   const before = dom.window.document.body.innerHTML;
   dom.window.eval(source);
   dom.window.eval(source);
-  assert.equal(dom.window.OrigamiVersion.version, '0.9.3');
+  assert.equal(dom.window.OrigamiVersion.version, '0.9.1');
   assert.equal(dom.window.document.querySelectorAll('meta[name="application-version"]').length, 1);
-  assert.equal(dom.window.document.querySelector('meta[name="application-version"]').content, '0.9.3');
+  assert.equal(dom.window.document.querySelector('meta[name="application-version"]').content, '0.9.1');
   assert.equal(dom.window.document.body.innerHTML, before);
   assert.equal(dom.window.document.querySelectorAll('a, button').length, 0);
   assert.ok(!/acercade/i.test(html));
-  assert.ok(/<script src="version\.js\?v=aligned-20261124"><\/script>/.test(html));
+  assert.ok(/<script src="version\.js\?v=rows-20261123"><\/script>/.test(html));
   dom.window.close();
 });
 

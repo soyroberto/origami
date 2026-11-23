@@ -12,8 +12,7 @@
     var $ = $gallery.constructor, namespace = '.stableLayout' + (++serial);
     var needsFit = true, raf = null, destroyed = false, observer = null;
     var lastWidth = 0, lastHeight = 0, last = null, fits = 0;
-    var preserveTopology = false, structureBaseline = 0, localFitBaseline = 0;
-    var BORDER = 4, GAP = 4;
+    var preserveTopology = false, structureBaseline = 0;
 
     function positive(value) {
       return typeof value === 'number' && isFinite(value) && value > 0;
@@ -45,15 +44,15 @@
             count++;
           });
           var childHeights;
-          if (type === 'single') childHeights = [rowHeight - BORDER];
+          if (type === 'single') childHeights = [rowHeight - 10];
           else {
             var first = leaves[0].getBoundingClientRect().height;
-            var second = leaves[1].getBoundingClientRect().height - GAP;
+            var second = leaves[1].getBoundingClientRect().height - 10;
             // Unmeasured Duo leaves retain their outer box; layout derives the
             // natural inverse-aspect height split instead of dropping geometry.
             if (positive(first) && positive(second)) {
-              var scaledFirst = (rowHeight - BORDER - GAP) * first / (first + second);
-              childHeights = [scaledFirst, rowHeight - BORDER - scaledFirst];
+              var scaledFirst = (rowHeight - 20) * first / (first + second);
+              childHeights = [scaledFirst, rowHeight - 10 - scaledFirst];
             }
           }
           row.push({ type: type, ratios: ratios });
@@ -69,8 +68,8 @@
           new Set(photos.map(function (p) { return p.url; })).size !== photos.length) return null;
       var validMeasurements = measured.every(function (row) {
         return positive(row.height) && row.groups.every(function (g) {
-          return positive(g.width) && g.width > BORDER && row.height > BORDER + (g.type === 'dual' ? GAP : 0) &&
-            (g.childHeights == null || (g.childHeights.every(positive) && (g.type !== 'dual' || g.childHeights[1] > GAP)));
+          return positive(g.width) && g.width > 10 && row.height > (g.type === 'dual' ? 20 : 10) &&
+            (g.childHeights == null || (g.childHeights.every(positive) && (g.type !== 'dual' || g.childHeights[1] > 10)));
         });
       });
       return { rows: rows, photos: photos, nodes: nodes, current: validMeasurements ? { rows: measured } : null };
@@ -114,7 +113,7 @@
           node.style.setProperty('--st-box-width', width);
           node.style.setProperty('--st-start-width', width);
           if (group.type === 'dual') Array.from(node.children).forEach(function (leaf, c) {
-            leaf.style.height = (group.childHeights[c] / (row.height - BORDER) * 100) + '%';
+            leaf.style.height = (group.childHeights[c] / (row.height - 10) * 100) + '%';
           });
         });
       });
@@ -128,19 +127,18 @@
 
     function flush() {
       raf = null;
-      if (destroyed || $gallery.hasClass('gallery-aligned') || !needsFit || $gallery.find('.disappear').length ||
+      if (destroyed || !needsFit || $gallery.find('.disappear').length ||
           $gallery.hasClass('leave') || $gallery.hasClass('left')) return;
       var playback = $gallery.data('shiftingtiles-playback');
       var state = playback && playback.stats ? playback.stats() : null;
       if (state && (state.loading || state.animating)) return;
       var width = gallery.clientWidth, height = gallery.clientHeight;
-      if (width <= 2 * BORDER || height <= 2 * (BORDER + GAP)) return;
+      if (width <= 20 || height <= 40) return;
       var input = snapshot();
       if (!input) return;
       // Remember structural playback even after both rows return to four photos.
       // Resizing must not silently run the initial optimizer on those identities.
-      preserveTopology = preserveTopology || input.photos.length !== 8 ||
-        !!(state && (state.structureChanges > structureBaseline || state.localFits > localFitBaseline));
+      preserveTopology = preserveTopology || input.photos.length !== 8 || !!(state && state.structureChanges > structureBaseline);
       // A nine-photo album only has one spare URL: keep Single boxes available.
       if (preserveTopology || !state || state.albumSize >= 10) {
         var plan = win.ShiftingTilesLayout.plan(input.rows, width, height, input.current,
@@ -173,7 +171,6 @@
       var playback = $gallery.data('shiftingtiles-playback');
       var state = playback && playback.stats ? playback.stats() : null;
       structureBaseline = state && state.structureChanges || 0;
-      localFitBaseline = state && state.localFits || 0;
       preserveTopology = false;
       needsFit = true;
       schedule();

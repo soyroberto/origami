@@ -59,8 +59,8 @@ for (const pathname of ['/acercade', '/acercade.html']) {
     assert.equal(document.title, 'Origami 0.9 — Acerca de');
     const scripts = [...document.querySelectorAll('script[src]')];
     assert.equal(scripts.length, 1);
-    assert.equal(scripts[0].getAttribute('src'), '/version.js?v=aligned-20261124');
-    assert.equal(scripts[0].src, `${origin}/version.js?v=aligned-20261124`);
+    assert.equal(scripts[0].getAttribute('src'), '/version.js?v=rows-20261123');
+    assert.equal(scripts[0].src, `${origin}/version.js?v=rows-20261123`);
     const allScripts = [...document.scripts];
     assert.equal(allScripts[0], scripts[0], 'version.js debe preceder al script de presentación');
     assert.equal(scripts[0].hasAttribute('async'), false);
@@ -109,13 +109,6 @@ test('describe la galería y atribuye inspiración sin inventar licencia o afili
   assert.match(description, /entre cuatro y seis fotos por fila/);
   assert.match(description, /bibliotecas separadas/);
   assert.match(description, /convierte.*HEIC.*navegador/);
-  assert.match(description, /completas, sin recortes ni deformación/);
-  assert.match(description, /4 píxeles.*perímetro/);
-  assert.match(description, /ajusta suavemente.*sin cambiar su orden/);
-  assert.match(description, /divisiones horizontales y verticales permanecen alineadas/);
-  assert.match(description, /celdas estables/);
-  assert.match(description, /No hay relleno borroso/);
-  assert.match(description, /margen negro residual/);
   const credits = document.querySelector('[aria-labelledby="creditos"]').textContent;
   assert.match(credits, /implementación original de Shifting Tiles/);
   assert.match(credits, /protector de pantalla Shifting Tiles de macOS/);
@@ -129,7 +122,7 @@ test('no solicita OneDrive, no inicia reproducción y no carga bibliotecas ni an
   assert.deepEqual(requests, []);
   assert.deepEqual(playbackCalls, []);
   assert.equal(document.scripts.length, 2);
-  assert.deepEqual([...document.querySelectorAll('script[src]')].map((script) => script.getAttribute('src')), ['/version.js?v=aligned-20261124']);
+  assert.deepEqual([...document.querySelectorAll('script[src]')].map((script) => script.getAttribute('src')), ['/version.js?v=rows-20261123']);
   assert.equal(document.querySelectorAll('img, picture, video, audio, iframe, canvas, object, embed, link').length, 0);
   const inline = document.querySelector('script:not([src])').textContent;
   assert.doesNotMatch(inline, /fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|setInterval|requestAnimationFrame|graph\.microsoft|api\.onedrive|gallery|playback|analytics/i);
