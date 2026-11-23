@@ -25,8 +25,8 @@ function fixture(count = 40, options = {}) {
     const isRow = this.classList.contains('row');
     let width = isRow ? 2000 : boxWidth, height = rowHeight;
     if (this.parentElement && this.parentElement.classList.contains('dual')) {
-      width -= 10;
-      height = parseFloat(this.style.height || '50') / 100 * (rowHeight - 10);
+      width -= 2;
+      height = parseFloat(this.style.height || '50') / 100 * (rowHeight - 2);
     }
     return {x: 0, y: 0, top: 0, left: 0, width, height, right: width, bottom: height};
   };
@@ -104,6 +104,8 @@ test('API defaults preserve eight initial requests, disabled legacy rows and a s
   const f = fixture(443, {dynamicRows: {enabled: false}});
   assert.equal(f.requests.length, 8);
   assert.equal(f.api.stats().dynamicRowsEnabled, false);
+  assert.equal(f.api.stats().adaptiveLayoutEnabled, false);
+  assert.equal(f.api.stats().localFits, 0);
   assert.deepEqual(f.counts(), [4, 4]);
   assert.equal(f.api.stats().structureChanges, 0);
   f.ready(); unique(f);
@@ -140,10 +142,10 @@ test('split preloads ALL slots, preserves position, outer width properties and r
   assert.deepEqual(f.counts(), [5, 4], 'outgoing is excluded from stable row counts');
   assert.equal(f.api.stats().visibleURLs.length, 10, 'outgoing is still excluded from queue eligibility');
   assert.equal(f.api.stats().structureChanges, 0, 'count only finished changes');
-  const heights = incoming.children().toArray().map(node => parseFloat(node.style.height) / 100 * 410);
-  assert.ok(Math.abs(heights[0] - 400 / 3) < 1e-8);
-  assert.ok(Math.abs(heights[1] - (800 / 3 + 10)) < 1e-8);
-  assert.ok(Math.abs(heights[0] + heights[1] - 410) < 1e-8);
+  const heights = incoming.children().toArray().map(node => parseFloat(node.style.height) / 100 * 418);
+  assert.ok(Math.abs(heights[0] - 416 / 3) < 1e-8);
+  assert.ok(Math.abs(heights[1] - (832 / 3 + 2)) < 1e-8);
+  assert.ok(Math.abs(heights[0] + heights[1] - 418) < 1e-8);
   assert.equal(f.api.frame(), false);
   f.end(); unique(f);
   assert.equal(row.children()[0], incoming[0]);
@@ -196,7 +198,7 @@ test('a six-photo four-box row cannot split its remaining Singles; growth retain
 });
 
 test('minimum measured dimensions block split; new slot ratios can roll back after preload', () => {
-  for (const [width, height] of [[169, 420], [500, 219], [0, 0]]) {
+  for (const [width, height] of [[161, 420], [500, 203], [0, 0]]) {
     const f = fixture(); f.ready(); f.measure(width, height);
     complete(f, f.row(0).children('.single').first());
     assert.deepEqual(f.counts(), [4, 4]);

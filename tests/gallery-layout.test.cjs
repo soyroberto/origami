@@ -20,13 +20,13 @@ function verify(result, input, W, H, bounded = true) {
   const seen = [], ratios = flatRatios(input), fills = [], rowFills = [];
   let area = 0;
   result.rows.forEach(row => {
-    assert.ok(Number.isFinite(row.height) && row.height > 10);
+    assert.ok(Number.isFinite(row.height) && row.height > 2);
     assert.ok(row.groups.length >= 2 && row.groups.length <= 4);
     close(row.groups.reduce((s, g) => s + g.width, 0), W);
     const bounds = { 2: [0.2, 0.8], 3: [0.12, 0.65], 4: [0.12, 0.5] }[row.groups.length];
     const local = [];
     row.groups.forEach(g => {
-      assert.ok(Number.isFinite(g.width) && g.width > 10);
+      assert.ok(Number.isFinite(g.width) && g.width > 2);
       if (bounded) {
         assert.ok(g.width / W >= bounds[0] - 1e-12);
         assert.ok(g.width / W <= bounds[1] + 1e-12);
@@ -34,11 +34,11 @@ function verify(result, input, W, H, bounded = true) {
       assert.ok(g.type === 'single' || g.type === 'dual');
       assert.equal(g.photoIndices.length, g.type === 'single' ? 1 : 2);
       assert.equal(g.childHeights.length, g.photoIndices.length);
-      close(g.childHeights.reduce((s, h) => s + h, 0), row.height - 10);
+      close(g.childHeights.reduce((s, h) => s + h, 0), row.height - 2);
       g.childHeights.forEach(h => assert.ok(Number.isFinite(h) && h > 0));
       g.photoIndices.forEach((index, c) => {
         seen.push(index);
-        const iw = g.width - 10, ih = g.childHeights[c] - (c ? 10 : 0);
+        const iw = g.width - 2, ih = g.childHeights[c] - (c ? 2 : 0);
         assert.ok(iw > 0 && ih > 0, 'positive bordered inner box, including Duo gap');
         const ratio = ratios[index];
         const scale = Math.min(iw / ratio, ih);
@@ -73,10 +73,10 @@ function capturedCurrent(equalDuo = false) {
   return { rows: input.map((row, r) => ({ height: heights[r], groups: row.map((g, j) => {
     const photoIndices = g.ratios.map(() => source++);
     let childHeights;
-    if (g.type === 'single') childHeights = [heights[r] - 10];
+    if (g.type === 'single') childHeights = [heights[r] - 2];
     else {
-      const first = equalDuo ? (heights[r] - 10) / 2 : (heights[r] - 20) * g.ratios[1] / (g.ratios[0] + g.ratios[1]);
-      childHeights = [first, heights[r] - 10 - first];
+      const first = equalDuo ? (heights[r] - 2) / 2 : (heights[r] - 4) * g.ratios[1] / (g.ratios[0] + g.ratios[1]);
+      childHeights = [first, heights[r] - 2 - first];
     }
     return { type: g.type, photoIndices, width: fractions[r][j] * W, childHeights };
   }) })) };
@@ -108,7 +108,7 @@ test('landscape ratio 1.6 at 16:9 retains a Duo when it fits better', () => {
   const result = plan(input, 1600, 900);
   verify(result, input, 1600, 900);
   assert.ok(result.rows.every(r => r.groups.some(g => g.type === 'dual')));
-  const allSingles = { rows: [0, 1].map(r => ({ height: 450, groups: [0, 1, 2, 3].map(j => ({ type: 'single', photoIndices: [r * 4 + j], width: 400, childHeights: [440] })) })) };
+  const allSingles = { rows: [0, 1].map(r => ({ height: 450, groups: [0, 1, 2, 3].map(j => ({ type: 'single', photoIndices: [r * 4 + j], width: 400, childHeights: [448] })) })) };
   const comparison = plan(input, 1600, 900, allSingles);
   assert.ok(result.meanFill > comparison.diagnostics.oldCurrent.meanFill + 0.2);
 });
@@ -145,13 +145,13 @@ test('eight source indices remain a permutation for mixed aspect ratios', () => 
   verify(result, input, 1366, 768);
 });
 
-test('natural inverse-aspect Duo children include exactly one 10px gap', () => {
+test('natural inverse-aspect Duo children include exactly one 2px gap', () => {
   const input = [[dual(0.8, 1.6), dual(0.8, 1.6)], [dual(0.8, 1.6), dual(0.8, 1.6)]];
   const result = plan(input, 800, 1200);
   verify(result, input, 800, 1200);
   const ratios = flatRatios(input);
   result.rows.forEach(row => row.groups.filter(g => g.type === 'dual').forEach(g => {
-    close(g.childHeights[0] * ratios[g.photoIndices[0]], (g.childHeights[1] - 10) * ratios[g.photoIndices[1]]);
+    close(g.childHeights[0] * ratios[g.photoIndices[0]], (g.childHeights[1] - 2) * ratios[g.photoIndices[1]]);
   }));
   assert.ok(result.rows.some(r => r.groups.some(g => g.type === 'dual')));
 });
@@ -188,7 +188,7 @@ test('material geometry refit does not repack equal square photo identities', ()
   const input = squares(), current = plan(input, 1915, 924);
   current.rows.forEach(row => {
     row.height = 462;
-    row.groups.forEach((g, i) => { g.width = [0.49, 0.12, 0.12, 0.27][i] * 1915; g.childHeights = [452]; });
+    row.groups.forEach((g, i) => { g.width = [0.49, 0.12, 0.12, 0.27][i] * 1915; g.childHeights = [460]; });
   });
   const result = plan(input, 1915, 924, current);
   assert.ok(result.quality - result.diagnostics.oldCurrent.quality >= 0.02);
@@ -232,16 +232,16 @@ test('positive finite extreme ratios do not overflow geometry or scores', () => 
 });
 
 test('small viable canvas skips impossible bordered packing shapes', () => {
-  const input = squares(), result = plan(input, 30, 70);
-  verify(result, input, 30, 70);
+  const input = squares(), result = plan(input, 6, 14);
+  verify(result, input, 6, 14);
   assert.deepEqual(result.rows.map(r => r.groups.length), [2, 2]);
 });
 
 test('invalid input and duplicate current identities fail explicitly', () => {
   assert.throws(() => plan(squares(), 0, 924), RangeError);
   assert.throws(() => plan(squares(), 1915, Infinity), RangeError);
-  assert.throws(() => plan(squares(), 20, 924), RangeError);
-  assert.throws(() => plan(squares(), 1915, 40), RangeError);
+  assert.throws(() => plan(squares(), 4, 924), RangeError);
+  assert.throws(() => plan(squares(), 1915, 8), RangeError);
   assert.throws(() => plan([squares()[0]], 1915, 924), TypeError);
   assert.throws(() => plan([[single(1), dual(1, 1)], squares()[0]], 1915, 924), TypeError);
   const badRatio = squares(); badRatio[0][0].ratios[0] = NaN;
@@ -285,7 +285,7 @@ function variableCurrent(input, W = 1600, H = 900) {
     const height = H * (r ? 0.63 : 0.37), total = row.reduce((n, _, i) => n + i + 2, 0);
     return { height, groups: row.map((g, i) => ({
       type: g.type, photoIndices: g.ratios.map(() => index++), width: W * (i + 2) / total,
-      childHeights: g.type === 'single' ? [height - 10] : [(height - 20) * 0.37, height - 10 - (height - 20) * 0.37]
+      childHeights: g.type === 'single' ? [height - 2] : [(height - 4) * 0.37, height - 2 - (height - 4) * 0.37]
     })) };
   }) };
 }
@@ -342,7 +342,7 @@ test('current variable geometry scales widths, row heights and inner Duo splits 
         row.groups.forEach((g, j) => {
           const old = current.rows[r].groups[j];
           close(g.width / W, old.width / 1600);
-          if (g.type === 'dual') close(g.childHeights[0] / (row.height - 20), old.childHeights[0] / (current.rows[r].height - 20));
+          if (g.type === 'dual') close(g.childHeights[0] / (row.height - 4), old.childHeights[0] / (current.rows[r].height - 4));
         });
       });
       assert.equal(result.diagnostics.widthSolves, 0);
@@ -361,7 +361,7 @@ test('unknown child heights use natural ratios while retaining current outer pro
     verify(result, input, W, H, false);
     result.rows.forEach((row, r) => row.groups.forEach((g, j) => {
       close(g.width / W, current.rows[r].groups[j].width / 1600);
-      if (g.type === 'dual') close(g.childHeights[0] * ratios[g.photoIndices[0]], (g.childHeights[1] - 10) * ratios[g.photoIndices[1]]);
+      if (g.type === 'dual') close(g.childHeights[0] * ratios[g.photoIndices[0]], (g.childHeights[1] - 2) * ratios[g.photoIndices[1]]);
     }));
   }
   assert.equal(JSON.stringify(current), before);
@@ -421,5 +421,5 @@ test('dynamic extreme ratios remain finite and cannot force topology changes on 
   const result = plan(input, 390, 844);
   verify(result, input, 390, 844);
   assert.equal(result.diagnostics.reordered, false);
-  assert.throws(() => plan(input, 30, 70), RangeError);
+  assert.throws(() => plan(input, 6, 14), RangeError);
 });

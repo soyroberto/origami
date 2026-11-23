@@ -54,6 +54,8 @@ html, body {
 }
 
 @disappear-duration: 1s;
+@separator: 2px;
+@tile-border: (@separator / 2);
 
 .shiftingtiles {
 	position: relative;
@@ -61,6 +63,9 @@ html, body {
 	height: 100vh;
 	height: 100dvh;
 	overflow: hidden;
+	box-sizing: border-box;
+	/* Outer 1px plus the edge tile's 1px makes the same 2px perimeter. */
+	border: @tile-border solid black;
 
 	.image() {
 		position: relative;
@@ -127,7 +132,8 @@ html, body {
 			float: left;
 			height: 100%;
 			box-sizing: border-box;
-			border: 5px solid black;
+			/* Two adjacent 1px borders share a 2px black separator. */
+			border: @tile-border solid black;
 		}
 		.single { 
 			width: 20%; 
@@ -142,7 +148,7 @@ html, body {
 				height: 50%;
 				box-sizing: border-box;
 				border: solid black;
-				border-width: 10px 0 0 0;
+				border-width: @separator 0 0 0;
 				.image();
 			}
 			> div:first-child {
@@ -163,6 +169,14 @@ html, body {
 	&.gallery-balanced > .row {
 		.single { width: var(--st-box-width, 20%); }
 		.dual { width: var(--st-box-width, 10%); }
+	}
+	&.gallery-fitting > .row {
+		.single:not(.disappear), .dual:not(.disappear) {
+			.transition(width @disappear-duration ease);
+		}
+		.dual:not(.disappear) > div {
+			.transition(height @disappear-duration ease);
+		}
 	}
 }
 

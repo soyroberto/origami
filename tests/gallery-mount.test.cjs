@@ -26,11 +26,12 @@ function fixture() {
   return {dom,w,$,gallery,requests,starts,updates,timers,images};
 }
 
-test('mount forwards dynamicRows only on initial playback, preserving isolated source and one poll timer', () => {
+test('mount forwards composition options only on initial playback, preserving isolated source and one poll timer', () => {
   const f = fixture();
   try {
     const dynamicRows = {enabled:true, probability:0.25, minTransitionsBetweenChanges:3, minTileWidth:160, minTileHeight:100};
-    const config = {libraryId:'instagram', dynamicRows};
+    const adaptiveLayout = {enabled:true, minGain:0.02, maxNeighbors:1};
+    const config = {libraryId:'instagram', dynamicRows, adaptiveLayout};
     const controller = f.w.ShiftingTilesPhotos.mount(f.gallery, ['foreign/spotify.jpg'], config);
     assert.equal(f.starts.length, 0);
     assert.equal(f.requests.length, 1);
@@ -38,6 +39,7 @@ test('mount forwards dynamicRows only on initial playback, preserving isolated s
     f.requests[0].success({version:1,images:f.images}, 'success');
     assert.equal(f.starts.length, 1);
     assert.equal(f.starts[0].options.dynamicRows, dynamicRows);
+    assert.equal(f.starts[0].options.adaptiveLayout, adaptiveLayout);
     assert.deepEqual(Array.from(f.starts[0].options.fallbackPhotos), []);
     assert.deepEqual(f.starts[0].images, f.images);
     assert.equal(f.w.ShiftingTilesPhotos.mount(f.gallery, [], config), controller);
@@ -60,6 +62,7 @@ test('mount without explicit dynamicRows keeps its original plugin options', () 
     assert.equal(f.starts.length, 1);
     assert.deepEqual(Object.keys(f.starts[0].options), ['fallbackPhotos']);
     assert.equal(f.starts[0].options.dynamicRows, undefined);
+    assert.equal(f.starts[0].options.adaptiveLayout, undefined);
     controller.stop();
   } finally { f.dom.window.close(); }
 });
@@ -79,6 +82,9 @@ test('root enables a moderate configurable split cadence without extra controls'
     assert.equal(mounts[0].dynamicRows.minTransitionsBetweenChanges, 3);
     assert.equal(mounts[0].dynamicRows.minTileWidth, 160);
     assert.equal(mounts[0].dynamicRows.minTileHeight, 100);
+    assert.equal(mounts[0].adaptiveLayout.enabled, true);
+    assert.equal(mounts[0].adaptiveLayout.minGain, 0.02);
+    assert.equal(mounts[0].adaptiveLayout.maxNeighbors, 1);
     assert.equal(mounts[0].refreshMs, 60000);
     assert.equal(w.document.querySelectorAll('a,button,input').length, 0);
   } finally { dom.window.close(); }

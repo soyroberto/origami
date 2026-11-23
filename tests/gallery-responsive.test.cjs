@@ -107,3 +107,33 @@ test('four-block rows animate the incoming fifth block with the existing small b
     assert.equal(declaration(rules, selector, 'animation-iteration-count'), '1');
   }
 });
+
+test('compiled LESS has 2px total separators between tiles, rows, Duo children and perimeter', async () => {
+  const rules = await compiledRules();
+  const gallery = parseFloat(declaration(rules, '.shiftingtiles', 'border'));
+  assert.equal(gallery, 1);
+  assert.equal(declaration(rules, '.shiftingtiles', 'box-sizing'), 'border-box');
+  for (const selector of ['.shiftingtiles > .row .single', '.shiftingtiles > .row .dual']) {
+    const edge = parseFloat(declaration(rules, selector, 'border'));
+    assert.equal(edge, 1);
+    assert.equal(declaration(rules, selector, 'box-sizing'), 'border-box');
+    assert.equal(edge + edge, 2, 'neighbouring tiles and rows share one 2px separator');
+    assert.equal(gallery + edge, 2, 'perimeter equals the interior separator, not just one tile edge');
+  }
+  assert.equal(declaration(rules, '.shiftingtiles > .row .dual > div', 'border-width'), '2px 0 0 0');
+  assert.equal(declaration(rules, '.shiftingtiles > .row .dual > div:first-child', 'border-top'), '0');
+});
+
+test('local fitting smoothly transitions stable widths and Duo heights, never outgoing blocks', async () => {
+  const rules = await compiledRules();
+  for (const selector of ['.shiftingtiles.gallery-fitting > .row .single:not(.disappear)', '.shiftingtiles.gallery-fitting > .row .dual:not(.disappear)']) {
+    assert.equal(declaration(rules, selector, 'transition'), 'width 1s ease');
+  }
+  assert.equal(declaration(rules, '.shiftingtiles.gallery-fitting > .row .dual:not(.disappear) > div', 'transition'), 'height 1s ease');
+  const fitting = rules.filter(rule => rule.selectorText?.includes('gallery-fitting'));
+  assert.equal(fitting.length, 2);
+  assert.ok(fitting.every(rule => rule.selectorText.includes(':not(.disappear)')));
+  for (const selector of ['.single.disappear', '.dual.disappear']) {
+    assert.match(declaration(rules, selector, 'animation'), /^disappear-(single|dual) 1s 0 linear$/);
+  }
+});

@@ -21,6 +21,135 @@
       dynamic.minTileWidth = Number(dynamic.minTileWidth) > 0 ? Number(dynamic.minTileWidth) : 160;
       dynamic.minTileHeight = Number(dynamic.minTileHeight) > 0 ? Number(dynamic.minTileHeight) : 100;
       var structureChanges = 0, completedSinceChange = dynamic.minTransitionsBetweenChanges;
+      var adaptive = $.extend({enabled: false, minGain: 0.02, maxNeighbors: 1}, settings.adaptiveLayout);
+      adaptive.enabled = adaptive.enabled === true;
+      adaptive.minGain = typeof adaptive.minGain === "number" && isFinite(adaptive.minGain) && adaptive.minGain >= 0 ? adaptive.minGain : 0.02;
+      adaptive.maxNeighbors = 1;
+      var localFits = 0, lastLocalFit = null;
+      var BORDER = 2, GAP = 2;
+
+      function adaptiveAvailable() {
+        return adaptive.enabled && window.ShiftingTilesLayout &&
+          typeof window.ShiftingTilesLayout.refitRow === "function";
+      }
+
+      function positive(value) { return typeof value === "number" && isFinite(value) && value > 0; }
+
+      function rowSnapshot(outgoing) {
+        var row = outgoing.parent(), nodes = row.children(".single, .dual").not(".disappear").toArray();
+        var width = Number(where[0].clientWidth), height = Number(row[0].getBoundingClientRect().height);
+        var anchor = nodes.indexOf(outgoing[0]), valid = anchor >= 0 && positive(width) && positive(height);
+        var widths = [], groups = nodes.map(function(node) {
+          var box = $(node), type = box.hasClass("dual") ? "dual" : "single";
+          var leaves = type === "dual" ? box.children("div") : box;
+          var ratios = leaves.map(function() {
+            var leaf = $(this), w = leaf.data("st-natural-width"), h = leaf.data("st-natural-height");
+            var request = leaf.data("st-image-request");
+            if(!positive(w) || !positive(h) || !positive(w / h) || !leaf.data("st-photo-url") ||
+              (request && request !== leaf.data("st-image-loaded-request"))) valid = false;
+            return w / h;
+          }).toArray();
+          var w = measure(box).width;
+          if(!positive(w) || w <= BORDER || ratios.length !== (type === "dual" ? 2 : 1)) valid = false;
+          widths.push(w);
+          return {type: type, ratios: ratios};
+        });
+        var total = widths.reduce(function(sum, w) { return sum + w; }, 0);
+        // clientWidth is integer-valued, while CSS boxes are subpixel-valued
+        // (commonly quantized to 1/64px). Reconcile at most one CSS pixel at
+        // the anchor, not by scaling every block or loosening the pure API.
+        var anchorWidth = widths[anchor];
+        if(!positive(total) || Math.abs(total - width) > 1 || height <= BORDER + GAP) valid = false;
+        if(valid) {
+          widths[anchor] = width - widths.reduce(function(sum, w, index) {
+            return sum + (index === anchor ? 0 : w);
+          }, 0);
+          if(!positive(widths[anchor]) || widths[anchor] <= BORDER) valid = false;
+        }
+        return valid ? {row: row, nodes: nodes, groups: groups, widths: widths, width: width,
+          height: height, anchor: anchor, anchorWidth: anchorWidth} : null;
+      }
+
+      function candidate(snapshot, slots, count) {
+        var groups = snapshot.groups.map(function(g) { return {type: g.type, ratios: g.ratios.slice()}; });
+        groups[snapshot.anchor] = {type: count === 2 ? "dual" : "single", ratios: slots.slice(0, count).map(function(slot) {
+          return slot.width / slot.height;
+        })};
+        var fit = window.ShiftingTilesLayout.refitRow(groups, snapshot.width, snapshot.height, snapshot.widths,
+          {anchorIndex: snapshot.anchor, maxNeighbors: 1});
+        var material = fit.gain + 1e-12 >= adaptive.minGain;
+        return {count: count, fit: fit, material: material,
+          coverage: material ? fit.coverage : fit.baselineCoverage};
+      }
+
+      function usefulCandidate(entry, snapshot) {
+        var g = entry.fit.groups[snapshot.anchor];
+        var w = entry.material ? g.width : snapshot.widths[snapshot.anchor];
+        return w - BORDER >= dynamic.minTileWidth && g.childHeights.every(function(h, index) {
+          return h - (index ? GAP : 0) >= dynamic.minTileHeight;
+        });
+      }
+
+      function selectAdaptive(transaction) {
+        if(!transaction.slots.every(function(slot) {
+          return positive(slot.width) && positive(slot.height) && positive(slot.width / slot.height);
+        })) return null;
+        var snapshot = rowSnapshot(transaction.outgoing);
+        if(transaction.structuralEligible && transaction.normalCount === 1 &&
+          transaction.slots.length === 2 && !canSplit(transaction.outgoing)) return null;
+        // Missing/invalid geometry keeps the normal type (and its queue invariants),
+        // never a speculative structural change based on stale measurements.
+        if(!snapshot) {
+          if(transaction.slots.length !== transaction.normalCount) return null;
+          return {count: transaction.normalCount, snapshot: null, fit: null, apply: false};
+        }
+        try {
+          var normal = candidate(snapshot, transaction.slots, transaction.normalCount), chosen = normal;
+          var alternate = transaction.normalCount === 2 ? 1 : 2;
+          if(transaction.structuralEligible && transaction.slots.length >= alternate &&
+            (alternate === 2 ? canSplit(transaction.outgoing) : rowCount(transaction.outgoing) > 4)) {
+            var structural = candidate(snapshot, transaction.slots, alternate);
+            if(usefulCandidate(structural, snapshot) &&
+              structural.coverage - normal.coverage + 1e-12 >= adaptive.minGain &&
+              structural.fit.coverage + 1e-12 >= normal.coverage) chosen = structural;
+          }
+          var changed = chosen.count !== (transaction.outgoing.hasClass("dual") ? 2 : 1);
+          // A forced one-photo merge is allowed for the last pending URL, but
+          // does not bypass positive geometry or the four-photo row minimum.
+          if(changed && (rowCount(transaction.outgoing) + chosen.count -
+            (transaction.outgoing.hasClass("dual") ? 2 : 1) < 4 ||
+            (transaction.structuralEligible && !usefulCandidate(chosen, snapshot)))) return null;
+          return {count: chosen.count, snapshot: snapshot, fit: chosen.fit,
+            apply: chosen.material || changed, structuralGain: chosen.coverage - normal.coverage};
+        } catch(error) {
+          return null;
+        }
+      }
+
+      function applyLocalFit(selection, outgoing, incoming) {
+        if(!selection || !selection.apply || !selection.snapshot) return;
+        var snapshot = selection.snapshot, fit = selection.fit;
+        var oldWidth = (snapshot.anchorWidth / snapshot.width * 50) + "%";
+        // The disappearing box must keep its OLD keyframe width.
+        outgoing[0].style.setProperty("--st-start-width", oldWidth);
+        where.addClass("gallery-balanced gallery-fitting");
+        // Establish the inserted clone's old width before setting its target,
+        // so its CSS transition has a start value just like existing neighbors.
+        incoming[0].getBoundingClientRect();
+        var start = fit.localRange[0], end = fit.localRange[1];
+        for(var i = start; i <= end; i++) {
+          var node = i === snapshot.anchor ? incoming[0] : snapshot.nodes[i], group = fit.groups[i];
+          var width = (group.width / snapshot.width * 50) + "%";
+          node.style.setProperty("--st-box-width", width);
+          node.style.setProperty("--st-start-width", width);
+          if(group.type === "dual") $(node).children("div").each(function(index) {
+            this.style.height = (group.childHeights[index] / (snapshot.height - BORDER) * 100) + "%";
+          });
+        }
+        localFits++;
+        lastLocalFit = {coverage: fit.coverage, baselineCoverage: fit.baselineCoverage, gain: fit.gain,
+          structuralGain: selection.structuralGain, localRange: fit.localRange.slice(), anchorIndex: snapshot.anchor};
+      }
 
       function rowPhotoCounts() {
         return where.children(".row").map(function() {
@@ -51,16 +180,16 @@
         // Keep two spare URLs AFTER growing, not merely enough for this preload.
         // Thus albums of 8/9/10 keep the original eight-photo composition.
         return rowCount(box) < 6 && queue.stats().albumSize - (total + 1) >= 2 &&
-          size.width - 10 >= dynamic.minTileWidth && size.height - 20 >= 2 * dynamic.minTileHeight;
+          size.width - BORDER >= dynamic.minTileWidth && size.height - BORDER - GAP >= 2 * dynamic.minTileHeight;
       }
 
       function duoHeights(size, slots) {
-        var usable = size.height - 20;
+        var usable = size.height - BORDER - GAP;
         var firstWeight = slots[0].height / slots[0].width;
         var secondWeight = slots[1].height / slots[1].width;
         var first = usable * firstWeight / (firstWeight + secondWeight);
-        // The second CSS border-box includes the existing ten-pixel separator.
-        return [first, usable - first + 10];
+        // The second CSS border-box includes the two-pixel separator.
+        return [first, usable - first + GAP];
       }
 
       function clearPhotoData(element) {
@@ -71,14 +200,15 @@
 
       function prepareIncoming(transaction) {
         var outgoing = transaction.outgoing, incoming = outgoing.clone();
-        if(!dynamic.enabled) return incoming;
+        if(!dynamic.enabled && !transaction.adaptive) return incoming;
         var count = transaction.slots.length, size = measure(outgoing);
         var changed = transaction.structureChange;
         if(changed && (rowCount(outgoing) + (count === 2 ? 1 : -1) < 4 ||
           rowCount(outgoing) + (count === 2 ? 1 : -1) > 6)) return null;
         var heights = count === 2 ? duoHeights(size, transaction.slots) : null;
         if(changed && count === 2 && (!canSplit(outgoing) ||
-          heights[0] < dynamic.minTileHeight || heights[1] - 10 < dynamic.minTileHeight)) return null;
+          ((!transaction.selection || !transaction.selection.apply) &&
+            (heights[0] < dynamic.minTileHeight || heights[1] - GAP < dynamic.minTileHeight)))) return null;
         if(changed) {
           clearPhotoData(incoming);
           incoming.empty().removeClass("single dual").addClass(count === 2 ? "dual" : "single");
@@ -91,8 +221,8 @@
           });
           incoming[0].style.width = "var(--st-box-width)";
         }
-        if(heights && size.height > 20) incoming.children("div").each(function(index) {
-          this.style.height = (heights[index] / (size.height - 10) * 100) + "%";
+        if(heights && size.height > BORDER + GAP) incoming.children("div").each(function(index) {
+          this.style.height = (heights[index] / (size.height - BORDER) * 100) + "%";
         });
         return incoming;
       }
@@ -209,6 +339,10 @@
       function activate(transaction) {
         if(!current(transaction) || transaction.kind !== "transition" ||
           !transaction.slots.every(function(slot) { return slot.loaded; }) || document.hidden || active) return;
+        if(transaction.adaptive && (where.hasClass("leave") || where.hasClass("left"))) {
+          cancelPending();
+          return;
+        }
         // Clone only after preload. Its old backgrounds are overwritten while detached.
         var outgoing = transaction.outgoing;
         if(!outgoing.parent().length) {
@@ -216,22 +350,44 @@
           schedule();
           return;
         }
+        where.trigger("st-animate-before", outgoing);
+        if(!current(transaction) || document.hidden) return;
+        if(transaction.adaptive && (where.hasClass("leave") || where.hasClass("left"))) {
+          cancelPending();
+          schedule();
+          return;
+        }
+        if(transaction.adaptive) {
+          // Re-read current canvas, row and ratios after ALL loads and callbacks.
+          transaction.selection = selectAdaptive(transaction);
+          if(!transaction.selection) {
+            cancelPending();
+            schedule();
+            return;
+          }
+          if(transaction.selection.count < transaction.slots.length) {
+            transaction.slots.splice(transaction.selection.count).forEach(function(slot) {
+              cleanRequest(slot);
+              queue.release(slot.url); // Never commit a successfully preloaded but unused photo.
+            });
+          }
+          transaction.structureChange = transaction.slots.length !== (outgoing.hasClass("dual") ? 2 : 1);
+        }
         var incoming = prepareIncoming(transaction);
         if(!incoming) {
           cancelPending();
           schedule();
           return;
         }
-        where.trigger("st-animate-before", outgoing);
-        if(!current(transaction) || document.hidden) return;
         var photos = incoming.hasClass("single") ? incoming : incoming.children();
         photos.each(function(index) { setPhoto($(this), transaction.slots[index]); });
         transaction.slots.forEach(function(slot) { queue.commit(slot.url); });
         pending = null;
         active = {outgoing: outgoing, incoming: incoming, structureChange: transaction.structureChange};
-        if(dynamic.enabled) incoming.insertAfter(outgoing);
+        if(dynamic.enabled || transaction.adaptive) incoming.insertAfter(outgoing);
         else outgoing.parent().append(incoming);
         outgoing.addClass("disappear");
+        applyLocalFit(transaction.selection, outgoing, incoming);
         photos.each(function(index) { imageReady($(this), transaction.slots[index]); });
         where.trigger("st-animate", outgoing);
         schedule();
@@ -257,7 +413,7 @@
           cleanup();
           queue.fail(slot.url);
           transaction.failedURLs.push(slot.url);
-          if(transaction.structureChange) {
+          if(transaction.structureChange || (transaction.adaptive && transaction.kind === "transition")) {
             // Structural changes are atomic: any failure retains the old type,
             // URLs and geometry, including a sibling that already loaded.
             cancelPending();
@@ -300,11 +456,14 @@
         image.src = slot.url;
       }
 
-      function startTransaction(kind, urls, elements, outgoing) {
+      function startTransaction(kind, urls, elements, outgoing, adaptiveContext) {
         var transaction = {
           kind: kind, generation: generation, cancelled: false, outgoing: outgoing,
           structureChange: kind === "transition" && outgoing &&
             urls.length !== (outgoing.hasClass("dual") ? 2 : 1),
+          adaptive: !!adaptiveContext,
+          normalCount: adaptiveContext && adaptiveContext.normalCount,
+          structuralEligible: adaptiveContext && adaptiveContext.structuralEligible,
           failedURLs: [],
           slots: urls.map(function(url, index) {
             return {url: url, element: elements ? $(elements[index]) : null,
@@ -340,22 +499,31 @@
 
       function frame() {
         if(destroyed || document.hidden || pending || active || queue.stats().albumSize < 8) return false;
+        if(adaptive.enabled && (where.hasClass("leave") || where.hasClass("left"))) return false;
         if(!initialReady) {
           var filling = fillInitial();
           schedule();
           return filling;
         }
-        var boxes = dynamic.enabled ? where.children(".row").children(".single, .dual").not(".disappear") :
+        var useAdaptive = !!adaptiveAvailable();
+        var boxes = dynamic.enabled || useAdaptive ? where.children(".row").children(".single, .dual").not(".disappear") :
           where.find(".single:not(:last-child), .dual:not(:last-child)");
         if(!boxes.length) return false;
         var outgoing = $(boxes.get(Math.floor(Math.random() * boxes.length)));
         var count = outgoing.hasClass("dual") ? 2 : 1;
+        var normalCount = count, eligible = false;
         if(dynamic.enabled && completedSinceChange >= dynamic.minTransitionsBetweenChanges &&
           Math.random() < dynamic.probability) {
-          if(count === 1 && canSplit(outgoing)) count = 2;
-          else if(count === 2 && rowCount(outgoing) > 4) count = 1;
+          if(count === 1 && canSplit(outgoing)) { count = 2; eligible = true; }
+          else if(count === 2 && rowCount(outgoing) > 4) { eligible = true; if(!useAdaptive) count = 1; }
         }
         var urls = reserve(count);
+        if(!urls.length && useAdaptive && normalCount === 1 && count === 2) {
+          // Only one unseen URL remains: replace the Single normally, without
+          // abandoning it simply because an optional split could not reserve two.
+          urls = reserve(1);
+          eligible = false;
+        }
         if(!urls.length && count === 2) {
           // Nine photos, or the last unused URL of a cycle, require a Single.
           var singles = boxes.filter(".single");
@@ -368,16 +536,20 @@
             outgoing = $(mergeable.get(Math.floor(Math.random() * mergeable.length)));
           } else return false;
           urls = reserve(1);
+          normalCount = 1;
+          eligible = false;
         }
-        if(!urls.length && dynamic.enabled && acknowledgeHeldPhotos()) return frame();
+        if(!urls.length && (dynamic.enabled || useAdaptive) && acknowledgeHeldPhotos()) return frame();
         if(!urls.length) return false;
         clearTimer();
-        startTransaction("transition", urls, null, outgoing);
+        startTransaction("transition", urls, null, outgoing, useAdaptive ?
+          {normalCount: normalCount, structuralEligible: eligible} : null);
         schedule();
         return true;
       }
 
       function finishAnimation() {
+        where.removeClass("gallery-fitting");
         if(!active) return;
         var outgoing = active.outgoing;
         if(active.structureChange) {
@@ -402,7 +574,7 @@
         nextImages = Array.isArray(nextImages) ? nextImages : [];
         queue.setImages(nextImages);
         updateMembers(nextImages);
-        if(dynamic.enabled) {
+        if(dynamic.enabled || adaptive.enabled) {
           var visible = visibleURLs(), stableCount = rowPhotoCounts().reduce(function(sum, count) { return sum + count; }, 0);
           var foreign = visible.some(function(url) { return !members[url]; });
           // If a smaller source cannot support this topology with spare URLs,
@@ -453,6 +625,9 @@
           state.rowPhotoCounts = rowPhotoCounts();
           state.structureChanges = structureChanges;
           state.dynamicRowsEnabled = dynamic.enabled;
+          state.adaptiveLayoutEnabled = adaptive.enabled;
+          state.localFits = localFits;
+          if(lastLocalFit) state.lastLocalFit = $.extend({}, lastLocalFit, {localRange: lastLocalFit.localRange.slice()});
           return state;
         },
         frame: frame,
@@ -474,7 +649,14 @@
           event.preventDefault();
           return false;
         }
-        if(event.keyCode === 38) where.toggleClass("leave");
+        if(event.keyCode === 38) {
+          where.toggleClass("leave");
+          if(adaptive.enabled) {
+            cancelPending();
+            finishAnimation();
+            where.removeClass("gallery-fitting");
+          }
+        }
       });
       $(document).on("visibilitychange" + namespace, function() {
         if(document.hidden) {
