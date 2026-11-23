@@ -194,6 +194,12 @@ html, body {
 	.animation-iteration-count(1);
 }
 
+/* A four-block row temporarily has a fifth block while the outgoing one shrinks. */
+.dual.disappear + * + * + * + *, .single.disappear + * + * + * + * {
+	.animation(bounce-small, (@disappear-duration));
+	.animation-fill-mode(forwards);
+	.animation-iteration-count(1);
+}
 
 .shiftingtiles.leave .row {
 	.animation(leave-r, 1s);

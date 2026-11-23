@@ -53,12 +53,12 @@ function verify(result, input, W, H, bounded = true) {
         area += iw / W * (ih / H) * fill;
       });
     });
-    assert.equal(local.length, 4);
-    rowFills.push(local.reduce((a, b) => a + b, 0) / 4);
+    assert.ok(local.length >= 4 && local.length <= 6);
+    rowFills.push(local.reduce((a, b) => a + b, 0) / local.length);
   });
-  assert.deepEqual(seen.slice().sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(seen.slice().sort((a, b) => a - b), ratios.map((_, i) => i));
   close(result.coverage, area);
-  close(result.meanFill, fills.reduce((a, b) => a + b, 0) / 8);
+  close(result.meanFill, fills.reduce((a, b) => a + b, 0) / ratios.length);
   close(result.minFill, Math.min(...fills));
   result.rowFill.forEach((fill, r) => close(fill, rowFills[r]));
   close(result.quality, result.meanFill * 0.55 + Math.min(...result.rowFill) * 0.30 + result.minFill * 0.15);
@@ -267,4 +267,159 @@ test('deterministic repeated plan and advisory Node runtime', () => {
   const second = plan(input, 1915, 924);
   assert.deepEqual(first, second);
   console.log('BOUNDED_RUNTIME', JSON.stringify({ elapsedMs: +elapsedMs.toFixed(3), targetMs: 100, advisoryOnly: true, shortlisted: first.diagnostics.shortlistCount, evaluatedLayouts: first.diagnostics.evaluatedLayouts }));
+});
+
+function variableInput(counts, variant = 0) {
+  const sizes = variant ? { 4: [1, 1, 1, 1], 5: [1, 1, 2, 1], 6: [1, 2, 2, 1] } :
+    { 4: [1, 2, 1], 5: [1, 2, 2], 6: [2, 2, 2] };
+  let index = 0;
+  return counts.map(count => sizes[count].map(size => ({
+    type: size === 1 ? 'single' : 'dual',
+    ratios: Array.from({ length: size }, () => [0.6, 1.8, 1.1, 2.3, 0.8][index++ % 5])
+  })));
+}
+
+function variableCurrent(input, W = 1600, H = 900) {
+  let index = 0;
+  return { rows: input.map((row, r) => {
+    const height = H * (r ? 0.63 : 0.37), total = row.reduce((n, _, i) => n + i + 2, 0);
+    return { height, groups: row.map((g, i) => ({
+      type: g.type, photoIndices: g.ratios.map(() => index++), width: W * (i + 2) / total,
+      childHeights: g.type === 'single' ? [height - 10] : [(height - 20) * 0.37, height - 10 - (height - 20) * 0.37]
+    })) };
+  }) };
+}
+
+const viewports = [[1915, 924], [1024, 768], [390, 844]];
+
+test('all 4/5/6 row combinations fit desktop, tablet and mobile without repacking', () => {
+  for (const a of [4, 5, 6]) for (const b of [4, 5, 6]) for (const variant of [0, 1]) {
+    const input = variableInput([a, b], variant), before = JSON.stringify(input);
+    let index = 0;
+    const identity = input.map(row => row.map(g => ({ type: g.type, photoIndices: g.ratios.map(() => index++) })));
+    for (const [W, H] of viewports) {
+      // Both-four is the post-structural path; the unchanged initial API is tested above.
+      const result = plan(input, W, H, null, { preserveTopology: true, requireSingle: true });
+      verify(result, input, W, H);
+      assert.deepEqual(shape(result), identity);
+      assert.deepEqual(result.rowPhotoCounts, [a, b]);
+      assert.equal(result.photoCount, a + b);
+      assert.equal(result.diagnostics.partitions, 0);
+      assert.equal(result.diagnostics.packingCandidates, 0);
+      assert.equal(result.diagnostics.evaluatedLayouts, 1);
+      assert.equal(result.diagnostics.reordered, false);
+      assert.ok(result.diagnostics.widthSolves <= 2);
+      assert.ok(result.diagnostics.boundedChecks <= 120);
+    }
+    assert.equal(JSON.stringify(input), before);
+  }
+});
+
+test('variable counts automatically take the non-combinatorial path without an option', () => {
+  for (const counts of [[4, 5], [5, 4], [5, 5], [4, 6], [6, 4], [5, 6], [6, 5], [6, 6]]) {
+    const input = variableInput(counts), result = plan(input, 390, 844);
+    verify(result, input, 390, 844);
+    assert.deepEqual(result.rowPhotoCounts, counts);
+    assert.equal(result.diagnostics.decision, 'preserved-topology');
+    assert.equal(result.diagnostics.packingCandidates, 0);
+  }
+});
+
+test('current variable geometry scales widths, row heights and inner Duo splits proportionally', () => {
+  for (const a of [4, 5, 6]) for (const b of [4, 5, 6]) {
+    const input = variableInput([a, b], 1), current = variableCurrent(input);
+    // Explicit source indices, rather than input order, remain authoritative.
+    current.rows.forEach(row => row.groups.reverse());
+    current.rows.reverse();
+    const before = JSON.stringify(current);
+    for (const [W, H] of viewports) {
+      const result = plan(input, W, H, current, { preserveTopology: true });
+      verify(result, input, W, H, false);
+      assert.deepEqual(shape(result), shape(current));
+      assert.deepEqual(result.rowPhotoCounts, [b, a]);
+      result.rows.forEach((row, r) => {
+        close(row.height / H, current.rows[r].height / 900);
+        row.groups.forEach((g, j) => {
+          const old = current.rows[r].groups[j];
+          close(g.width / W, old.width / 1600);
+          if (g.type === 'dual') close(g.childHeights[0] / (row.height - 20), old.childHeights[0] / (current.rows[r].height - 20));
+        });
+      });
+      assert.equal(result.diagnostics.widthSolves, 0);
+      assert.equal(result.diagnostics.boundedChecks, 0);
+    }
+    assert.equal(JSON.stringify(current), before);
+  }
+});
+
+test('unknown child heights use natural ratios while retaining current outer proportions', () => {
+  const input = variableInput([5, 6]), ratios = flatRatios(input), current = variableCurrent(input);
+  current.rows.forEach(row => row.groups.forEach(g => { delete g.childHeights; }));
+  const before = JSON.stringify(current);
+  for (const [W, H] of viewports) {
+    const result = plan(input, W, H, current);
+    verify(result, input, W, H, false);
+    result.rows.forEach((row, r) => row.groups.forEach((g, j) => {
+      close(g.width / W, current.rows[r].groups[j].width / 1600);
+      if (g.type === 'dual') close(g.childHeights[0] * ratios[g.photoIndices[0]], (g.childHeights[1] - 10) * ratios[g.photoIndices[1]]);
+    }));
+  }
+  assert.equal(JSON.stringify(current), before);
+});
+
+test('real index range and row invariants reject duplicate, missing and out-of-range sources', () => {
+  const input = variableInput([6, 6]);
+  for (const invalidIndex of [0, 12, -1, 8.5]) {
+    const current = variableCurrent(input);
+    current.rows[1].groups[2].photoIndices[1] = invalidIndex;
+    assert.throws(() => plan(input, 1600, 900, current), TypeError);
+  }
+  const missing = variableCurrent(input);
+  missing.rows[1].groups[2] = { type: 'single', photoIndices: [10], width: 500, childHeights: [557] };
+  assert.throws(() => plan(input, 1600, 900, missing), TypeError);
+  const malformed = variableCurrent(input);
+  malformed.rows[0].groups[0].childHeights = [];
+  assert.throws(() => plan(input, 1600, 900, malformed), TypeError);
+  assert.throws(() => plan([Array.from({ length: 5 }, () => single(1)), input[1]], 1600, 900), TypeError);
+  assert.throws(() => plan([[dual(1, 1), dual(1, 1), dual(1, 1), single(1)], input[1]], 1600, 900), TypeError);
+  const tooMany = variableCurrent(input);
+  tooMany.rows[0].groups.push({ type: 'single', photoIndices: [12], width: 100, childHeights: [323] });
+  assert.throws(() => plan(input, 1600, 900, tooMany), TypeError);
+});
+
+test('preserveTopology also bypasses the initial optimizer after returning to eight photos', () => {
+  const input = capture(), current = capturedCurrent(true);
+  const result = plan(input, 390, 844, current, { preserveTopology: true, requireSingle: true });
+  verify(result, input, 390, 844, false);
+  assert.deepEqual(shape(result), shape(current));
+  assert.equal(result.diagnostics.partitions, 0);
+  assert.equal(result.diagnostics.decision, 'preserved-topology');
+  const initial = plan(input, 1915, 924);
+  assert.equal(initial.diagnostics.partitions, 35);
+  assert.equal(initial.diagnostics.packingCandidates, 3500);
+});
+
+test('twelve-photo resize work stays bounded, with no candidate enumeration or width search', () => {
+  const input = variableInput([6, 6]), current = variableCurrent(input);
+  const started = performance.now();
+  for (let i = 0; i < 200; i++) {
+    const result = plan(input, 390 + i, 844, current, { requireSingle: true });
+    assert.equal(result.diagnostics.partitions, 0);
+    assert.equal(result.diagnostics.packingCandidates, 0);
+    assert.equal(result.diagnostics.shortlistCount, 0);
+    assert.equal(result.diagnostics.evaluatedLayouts, 1);
+    assert.equal(result.diagnostics.widthSolves, 0);
+    assert.equal(result.diagnostics.boundedChecks, 0);
+    assert.equal(result.photoCount, 12);
+  }
+  console.log('TWELVE_PHOTO_LINEAR_RUNTIME', JSON.stringify({ calls: 200, elapsedMs: +(performance.now() - started).toFixed(3), advisoryOnly: true }));
+});
+
+test('dynamic extreme ratios remain finite and cannot force topology changes on a tiny canvas', () => {
+  const input = variableInput([6, 6]);
+  input[0][0].ratios = [Number.MIN_VALUE, Number.MAX_VALUE];
+  const result = plan(input, 390, 844);
+  verify(result, input, 390, 844);
+  assert.equal(result.diagnostics.reordered, false);
+  assert.throws(() => plan(input, 30, 70), RangeError);
 });

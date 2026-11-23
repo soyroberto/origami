@@ -13,6 +13,89 @@
       var initialReady = false, generation = 0, members = Object.create(null);
       var photoSelector = ".single, .dual > div";
       var duration = Number(settings.duration) > 0 ? Number(settings.duration) : 5000;
+      var dynamic = $.extend({enabled: false, probability: 0.25,
+        minTransitionsBetweenChanges: 3, minTileWidth: 160, minTileHeight: 100}, settings.dynamicRows);
+      dynamic.enabled = dynamic.enabled === true;
+      dynamic.probability = Math.max(0, Math.min(1, Number(dynamic.probability) || 0));
+      dynamic.minTransitionsBetweenChanges = Math.max(0, Math.floor(Number(dynamic.minTransitionsBetweenChanges) || 0));
+      dynamic.minTileWidth = Number(dynamic.minTileWidth) > 0 ? Number(dynamic.minTileWidth) : 160;
+      dynamic.minTileHeight = Number(dynamic.minTileHeight) > 0 ? Number(dynamic.minTileHeight) : 100;
+      var structureChanges = 0, completedSinceChange = dynamic.minTransitionsBetweenChanges;
+
+      function rowPhotoCounts() {
+        return where.children(".row").map(function() {
+          var count = 0;
+          $(this).children(".single, .dual").not(".disappear").each(function() {
+            count += $(this).hasClass("dual") ? 2 : 1;
+          });
+          return count;
+        }).toArray();
+      }
+
+      function rowCount(box) {
+        var count = 0;
+        box.parent().children(".single, .dual").not(".disappear").each(function() {
+          count += $(this).hasClass("dual") ? 2 : 1;
+        });
+        return count;
+      }
+
+      function measure(box) {
+        var bounds = box[0].getBoundingClientRect();
+        return {width: Number(bounds.width) || box.outerWidth(),
+          height: Number(bounds.height) || box.outerHeight()};
+      }
+
+      function canSplit(box) {
+        var size = measure(box), total = visibleURLs().length;
+        // Keep two spare URLs AFTER growing, not merely enough for this preload.
+        // Thus albums of 8/9/10 keep the original eight-photo composition.
+        return rowCount(box) < 6 && queue.stats().albumSize - (total + 1) >= 2 &&
+          size.width - 10 >= dynamic.minTileWidth && size.height - 20 >= 2 * dynamic.minTileHeight;
+      }
+
+      function duoHeights(size, slots) {
+        var usable = size.height - 20;
+        var firstWeight = slots[0].height / slots[0].width;
+        var secondWeight = slots[1].height / slots[1].width;
+        var first = usable * firstWeight / (firstWeight + secondWeight);
+        // The second CSS border-box includes the existing ten-pixel separator.
+        return [first, usable - first + 10];
+      }
+
+      function clearPhotoData(element) {
+        element.css("background-image", "none")
+          .removeData("st-photo-url").removeData("st-natural-width").removeData("st-natural-height")
+          .removeData("st-image-request").removeData("st-image-loaded-request");
+      }
+
+      function prepareIncoming(transaction) {
+        var outgoing = transaction.outgoing, incoming = outgoing.clone();
+        if(!dynamic.enabled) return incoming;
+        var count = transaction.slots.length, size = measure(outgoing);
+        var changed = transaction.structureChange;
+        if(changed && (rowCount(outgoing) + (count === 2 ? 1 : -1) < 4 ||
+          rowCount(outgoing) + (count === 2 ? 1 : -1) > 6)) return null;
+        var heights = count === 2 ? duoHeights(size, transaction.slots) : null;
+        if(changed && count === 2 && (!canSplit(outgoing) ||
+          heights[0] < dynamic.minTileHeight || heights[1] - 10 < dynamic.minTileHeight)) return null;
+        if(changed) {
+          clearPhotoData(incoming);
+          incoming.empty().removeClass("single dual").addClass(count === 2 ? "dual" : "single");
+          if(count === 2) incoming.append("<div></div><div></div>");
+          // clone() preserves custom properties; only supply missing geometry.
+          var parentWidth = outgoing.parent()[0].getBoundingClientRect().width || outgoing.parent().width();
+          var width = parentWidth > 0 ? (size.width / parentWidth * 100) + "%" : size.width + "px";
+          ["--st-box-width", "--st-start-width"].forEach(function(property) {
+            if(!incoming[0].style.getPropertyValue(property)) incoming[0].style.setProperty(property, width);
+          });
+          incoming[0].style.width = "var(--st-box-width)";
+        }
+        if(heights && size.height > 20) incoming.children("div").each(function(index) {
+          this.style.height = (heights[index] / (size.height - 10) * 100) + "%";
+        });
+        return incoming;
+      }
 
       function updateMembers(nextImages) {
         members = Object.create(null);
@@ -37,6 +120,24 @@
         var urls = queue.reserve(count, visibleURLs().concat(extraExcluded || []));
         if(queue.stats().cycle !== before) where.trigger("st-galleryrestart");
         return urls;
+      }
+
+      function acknowledgeHeldPhotos() {
+        // A small album cannot atomically replace a Duo with only one spare.
+        // When no unseen offscreen photo remains, photos continuously visible
+        // from the previous turn have already been displayed in this turn too.
+        // Acknowledge those through AlbumQueue (no Image/HTTP and no duplicate),
+        // so that they cannot prevent the next complete turn indefinitely.
+        var state = queue.stats(), acknowledged = 0;
+        if(state.albumSize <= visibleURLs().length || state.seenCount + state.failedCount === state.albumSize) return false;
+        var all = Object.keys(members);
+        visibleURLs().forEach(function(url) {
+          var currentState = queue.stats();
+          if(currentState.seenCount + currentState.failedCount === currentState.albumSize) return;
+          var held = queue.reserve(1, all.filter(function(member) { return member !== url; }));
+          if(held.length && queue.commit(held[0])) acknowledged++;
+        });
+        return acknowledged > 0;
       }
 
       function clearTimer() {
@@ -68,6 +169,8 @@
           cleanRequest(slot);
           queue.release(slot.url);
         });
+        // A pending resize must resume even if no image/animation will finish.
+        where.trigger("st-preload-cancelled");
       }
 
       function current(transaction) {
@@ -113,15 +216,21 @@
           schedule();
           return;
         }
+        var incoming = prepareIncoming(transaction);
+        if(!incoming) {
+          cancelPending();
+          schedule();
+          return;
+        }
         where.trigger("st-animate-before", outgoing);
         if(!current(transaction) || document.hidden) return;
-        var incoming = outgoing.clone();
         var photos = incoming.hasClass("single") ? incoming : incoming.children();
         photos.each(function(index) { setPhoto($(this), transaction.slots[index]); });
         transaction.slots.forEach(function(slot) { queue.commit(slot.url); });
         pending = null;
-        active = {outgoing: outgoing, incoming: incoming};
-        outgoing.parent().append(incoming);
+        active = {outgoing: outgoing, incoming: incoming, structureChange: transaction.structureChange};
+        if(dynamic.enabled) incoming.insertAfter(outgoing);
+        else outgoing.parent().append(incoming);
         outgoing.addClass("disappear");
         photos.each(function(index) { imageReady($(this), transaction.slots[index]); });
         where.trigger("st-animate", outgoing);
@@ -148,6 +257,13 @@
           cleanup();
           queue.fail(slot.url);
           transaction.failedURLs.push(slot.url);
+          if(transaction.structureChange) {
+            // Structural changes are atomic: any failure retains the old type,
+            // URLs and geometry, including a sibling that already loaded.
+            cancelPending();
+            schedule();
+            return;
+          }
           if(slot.attempts < 3) {
             var replacement = reserve(1, transaction.failedURLs);
             if(replacement.length) {
@@ -187,6 +303,8 @@
       function startTransaction(kind, urls, elements, outgoing) {
         var transaction = {
           kind: kind, generation: generation, cancelled: false, outgoing: outgoing,
+          structureChange: kind === "transition" && outgoing &&
+            urls.length !== (outgoing.hasClass("dual") ? 2 : 1),
           failedURLs: [],
           slots: urls.map(function(url, index) {
             return {url: url, element: elements ? $(elements[index]) : null,
@@ -194,7 +312,9 @@
           })
         };
         pending = transaction;
-        transaction.slots.forEach(function(slot) { loadSlot(transaction, slot); });
+        transaction.slots.forEach(function(slot) {
+          if(current(transaction)) loadSlot(transaction, slot);
+        });
       }
 
       function setupRows() {
@@ -225,18 +345,31 @@
           schedule();
           return filling;
         }
-        var boxes = where.find(".single:not(:last-child), .dual:not(:last-child)");
+        var boxes = dynamic.enabled ? where.children(".row").children(".single, .dual").not(".disappear") :
+          where.find(".single:not(:last-child), .dual:not(:last-child)");
         if(!boxes.length) return false;
         var outgoing = $(boxes.get(Math.floor(Math.random() * boxes.length)));
         var count = outgoing.hasClass("dual") ? 2 : 1;
+        if(dynamic.enabled && completedSinceChange >= dynamic.minTransitionsBetweenChanges &&
+          Math.random() < dynamic.probability) {
+          if(count === 1 && canSplit(outgoing)) count = 2;
+          else if(count === 2 && rowCount(outgoing) > 4) count = 1;
+        }
         var urls = reserve(count);
         if(!urls.length && count === 2) {
           // Nine photos, or the last unused URL of a cycle, require a Single.
           var singles = boxes.filter(".single");
-          if(!singles.length) return false;
-          outgoing = $(singles.get(Math.floor(Math.random() * singles.length)));
+          if(singles.length) outgoing = $(singles.get(Math.floor(Math.random() * singles.length)));
+          else if(dynamic.enabled) {
+            // Splits can remove every Single, but always leave a recovery Duo
+            // in a row above four. This one-photo entry completes odd cycles.
+            var mergeable = boxes.filter(".dual").filter(function() { return rowCount($(this)) > 4; });
+            if(!mergeable.length) return false;
+            outgoing = $(mergeable.get(Math.floor(Math.random() * mergeable.length)));
+          } else return false;
           urls = reserve(1);
         }
+        if(!urls.length && dynamic.enabled && acknowledgeHeldPhotos()) return frame();
         if(!urls.length) return false;
         clearTimer();
         startTransaction("transition", urls, null, outgoing);
@@ -247,6 +380,10 @@
       function finishAnimation() {
         if(!active) return;
         var outgoing = active.outgoing;
+        if(active.structureChange) {
+          structureChanges++;
+          completedSinceChange = 0;
+        } else completedSinceChange++;
         active = null;
         outgoing.css("display", "none").remove();
         where.trigger("st-animate-after");
@@ -256,9 +393,7 @@
       function clearPhotos() {
         finishAnimation();
         where.find(photoSelector).each(function() {
-          $(this).css("background-image", "none")
-            .removeData("st-photo-url").removeData("st-natural-width").removeData("st-natural-height")
-            .removeData("st-image-request").removeData("st-image-loaded-request");
+          clearPhotoData($(this));
         });
         initialReady = false;
       }
@@ -267,6 +402,23 @@
         nextImages = Array.isArray(nextImages) ? nextImages : [];
         queue.setImages(nextImages);
         updateMembers(nextImages);
+        if(dynamic.enabled) {
+          var visible = visibleURLs(), stableCount = rowPhotoCounts().reduce(function(sum, count) { return sum + count; }, 0);
+          var foreign = visible.some(function(url) { return !members[url]; });
+          // If a smaller source cannot support this topology with spare URLs,
+          // reset only when necessary. A normal refresh retains queue history.
+          if(foreign || (stableCount > 8 && queue.stats().albumSize - stableCount < 2) ||
+            (queue.stats().albumSize < 8 && stableCount)) {
+            generation++;
+            cancelPending();
+            clearTimer();
+            clearPhotos();
+            where.children(".row").remove();
+            where.children(".loading").remove();
+            queue = window.ShiftingTilesAlbumQueue.create(nextImages);
+            completedSinceChange = dynamic.minTransitionsBetweenChanges;
+          }
+        }
         if(!queue.stats().albumSize) {
           generation++;
           cancelPending();
@@ -298,6 +450,9 @@
           state.visibleURLs = visibleURLs();
           state.loading = !!pending;
           state.animating = !!active;
+          state.rowPhotoCounts = rowPhotoCounts();
+          state.structureChanges = structureChanges;
+          state.dynamicRowsEnabled = dynamic.enabled;
           return state;
         },
         frame: frame,

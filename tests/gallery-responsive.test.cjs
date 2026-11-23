@@ -98,3 +98,12 @@ test('compiled LESS keeps percentage row geometry and existing animation keyfram
     assert.ok(names.includes(name), `Missing existing keyframes: ${name}`);
   }
 });
+
+test('four-block rows animate the incoming fifth block with the existing small bounce', async () => {
+  const rules = await compiledRules();
+  for (const selector of ['.dual.disappear + * + * + * + *', '.single.disappear + * + * + * + *']) {
+    assert.match(declaration(rules, selector, 'animation'), /^bounce-small 1s 0 linear$/);
+    assert.equal(declaration(rules, selector, 'animation-fill-mode'), 'forwards');
+    assert.equal(declaration(rules, selector, 'animation-iteration-count'), '1');
+  }
+});

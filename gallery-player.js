@@ -1,4 +1,4 @@
-/* Fit the eight loaded photos once, then keep Single/Duo geometry stable. */
+/* Fit loaded photos initially/on resize, keeping dynamic Single/Duo identity stable. */
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -12,6 +12,7 @@
     var $ = $gallery.constructor, namespace = '.stableLayout' + (++serial);
     var needsFit = true, raf = null, destroyed = false, observer = null;
     var lastWidth = 0, lastHeight = 0, last = null, fits = 0;
+    var preserveTopology = false, structureBaseline = 0;
 
     function positive(value) {
       return typeof value === 'number' && isFinite(value) && value > 0;
@@ -24,11 +25,11 @@
       rowNodes.each(function () {
         var row = [], groups = [], geometry = [], count = 0;
         var rowHeight = this.getBoundingClientRect().height;
-        $(this).children('.single, .dual').each(function () {
+        $(this).children('.single, .dual').not('.disappear').each(function () {
           var type = $(this).hasClass('dual') ? 'dual' : 'single';
-          var leaves = type === 'dual' ? $(this).children('div') : $(this);
+          var leaves = type === 'dual' ? $(this).children('div').not('.disappear') : $(this);
           var ratios = [], indices = [];
-          if (leaves.length !== (type === 'dual' ? 2 : 1)) ready = false;
+          if (leaves.length !== (type === 'dual' ? 2 : 1)) { ready = false; return; }
           leaves.each(function () {
             var leaf = $(this), width = leaf.data('st-natural-width');
             var height = leaf.data('st-natural-height'), url = leaf.data('st-photo-url');
@@ -47,22 +48,28 @@
           else {
             var first = leaves[0].getBoundingClientRect().height;
             var second = leaves[1].getBoundingClientRect().height - 10;
-            var scaledFirst = (rowHeight - 20) * first / (first + second);
-            childHeights = [scaledFirst, rowHeight - 10 - scaledFirst];
+            // Unmeasured Duo leaves retain their outer box; layout derives the
+            // natural inverse-aspect height split instead of dropping geometry.
+            if (positive(first) && positive(second)) {
+              var scaledFirst = (rowHeight - 20) * first / (first + second);
+              childHeights = [scaledFirst, rowHeight - 10 - scaledFirst];
+            }
           }
           row.push({ type: type, ratios: ratios });
           groups.push({ node: this, indices: indices, type: type });
           geometry.push({ type: type, photoIndices: indices, width: this.getBoundingClientRect().width, childHeights: childHeights });
         });
-        if (count !== 4 || row.length < 2 || row.length > 4) ready = false;
+        if (count < 4 || count > 6 || row.length < 2 || row.length > 4) ready = false;
         rows.push(row);
         nodes.push({ node: this, groups: groups });
         measured.push({ height: rowHeight, groups: geometry });
       });
-      if (!ready || photos.length !== 8 || new Set(photos.map(function (p) { return p.url; })).size !== 8) return null;
+      if (!ready || photos.length < 8 || photos.length > 12 ||
+          new Set(photos.map(function (p) { return p.url; })).size !== photos.length) return null;
       var validMeasurements = measured.every(function (row) {
         return positive(row.height) && row.groups.every(function (g) {
-          return positive(g.width) && g.childHeights.every(positive);
+          return positive(g.width) && g.width > 10 && row.height > (g.type === 'dual' ? 20 : 10) &&
+            (g.childHeights == null || (g.childHeights.every(positive) && (g.type !== 'dual' || g.childHeights[1] > 10)));
         });
       });
       return { rows: rows, photos: photos, nodes: nodes, current: validMeasurements ? { rows: measured } : null };
@@ -129,9 +136,13 @@
       if (width <= 20 || height <= 40) return;
       var input = snapshot();
       if (!input) return;
+      // Remember structural playback even after both rows return to four photos.
+      // Resizing must not silently run the initial optimizer on those identities.
+      preserveTopology = preserveTopology || input.photos.length !== 8 || !!(state && state.structureChanges > structureBaseline);
       // A nine-photo album only has one spare URL: keep Single boxes available.
-      if (!state || state.albumSize >= 10) {
-        var plan = win.ShiftingTilesLayout.plan(input.rows, width, height, input.current, { requireSingle: true });
+      if (preserveTopology || !state || state.albumSize >= 10) {
+        var plan = win.ShiftingTilesLayout.plan(input.rows, width, height, input.current,
+          { requireSingle: true, preserveTopology: preserveTopology });
         apply(plan, input);
       } else {
         last = { fits: ++fits, width: width, height: height, rearranged: false, smallAlbum: true };
@@ -154,6 +165,17 @@
       }
     }
 
+    function initialReady() {
+      // Source replacement can recreate rows after a completed initial fit.
+      // Their geometry is new, not a per-photo replacement of the old topology.
+      var playback = $gallery.data('shiftingtiles-playback');
+      var state = playback && playback.stats ? playback.stats() : null;
+      structureBaseline = state && state.structureChanges || 0;
+      preserveTopology = false;
+      needsFit = true;
+      schedule();
+    }
+
     var controller = {
       metrics: function () { return last ? JSON.parse(JSON.stringify(last)) : null; },
       destroy: function () {
@@ -164,7 +186,8 @@
         else win.removeEventListener('resize', resized);
       }
     };
-    $gallery.on('st-image-ready' + namespace + ' st-initial-ready' + namespace + ' st-animate-after' + namespace, schedule);
+    $gallery.on('st-image-ready' + namespace + ' st-animate-after' + namespace + ' st-preload-cancelled' + namespace, schedule);
+    $gallery.on('st-initial-ready' + namespace, initialReady);
     if (typeof win.ResizeObserver === 'function') {
       observer = new win.ResizeObserver(resized);
       observer.observe(gallery);

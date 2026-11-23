@@ -1,8 +1,8 @@
 # Origami 0.9
 
-Galería animada de fotos de OneDrive, basada en la implementación web de Shifting Tiles. Conserva ocho fotos —cuatro por fila—, las transiciones Single/Duo y las bibliotecas separadas. El publicador incremental convierte HEIC/HEIF a JPEG para los navegadores, sin modificar los originales OneDrive.
+Galería animada de fotos de OneDrive, basada en la implementación web de Shifting Tiles. Comienza con ocho fotos —cuatro por fila— y divide o compacta ocasionalmente algunos bloques para mostrar entre cuatro y seis fotos por fila, si el espacio y el álbum lo permiten. Conserva las transiciones Single/Duo y las bibliotecas separadas. El publicador incremental convierte HEIC/HEIF a JPEG para los navegadores, sin modificar los originales OneDrive.
 
-La versión tiene una única definición en `version.js`: **0.9.0**. Su etiqueta es `v0.9.0`; la presentación abreviada es **Origami 0.9**.
+La versión tiene una única definición en `version.js`: **0.9.1**. Su etiqueta es `v0.9.1`; la presentación abreviada es **Origami 0.9**. La etiqueta histórica `v0.9.0` permanece intacta.
 
 ## Código y configuración
 
@@ -12,16 +12,16 @@ Repositorio independiente: https://github.com/soyroberto/origami
 
 Guía para que el propietario configure GitHub y Azure: https://github.com/soyroberto/origami/blob/main/docs/configuracion-origami.md
 
-El workflow del sitio está **bloqueado por defecto** mediante `ORIGAMI_DEPLOY_ENABLED`. Los secretos, el entorno y la credencial federada no se transfieren automáticamente. El publicador permanece en `backend/onedrive-publisher` y se despliega separadamente; este workflow solo publica el frontend.
+El workflow del sitio está **bloqueado por defecto** mediante `ORIGAMI_DEPLOY_ENABLED`; su activación y la transición desde el repositorio legado se completaron el 23 de noviembre de 2026. Los cambios de `main` se publican mediante el entorno GitHub `beta` y OIDC, sin eliminar las fotos existentes. El publicador permanece en `backend/onedrive-publisher` y se despliega separadamente; este workflow solo publica el frontend.
 
 ## Sitio
 
-Se reutilizan los recursos existentes. Direcciones de destino después de completar la configuración y ejecutar el despliegue:
+Se reutilizan los recursos existentes. Direcciones del sitio:
 
 - Galería: https://saauxfotos.z26.web.core.windows.net/
 - Acerca de: https://saauxfotos.z26.web.core.windows.net/acercade
 
-No se añade ninguna liga desde la raíz a `/acercade`, ni texto permanente sobre las fotografías. No se ha desplegado esta nueva versión al preparar el repositorio.
+No se añade ninguna liga desde la raíz a `/acercade`, ni texto permanente sobre las fotografías. Las divisiones se configuran en `index.html` mediante `dynamicRows`; consulta [reproducción de álbumes](docs/album-playback.md). Las sombras, el relleno y los bordes actuales no se rediseñaron en esta actualización.
 
 ## Desarrollo
 

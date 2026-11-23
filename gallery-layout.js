@@ -1,4 +1,4 @@
-/* Eight existing photos, two rows, contain-only geometry. No DOM, network or timers. */
+/* Two rows of 4..6 existing photos, contain-only geometry. No DOM, network or timers. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.ShiftingTilesLayout = factory();
@@ -41,7 +41,7 @@
         var indices = g.ratios.map(function (ratio) { var index = ratios.length; ratios.push(ratio); count++; return index; });
         return group(indices);
       }));
-      if (count !== 4) throw new TypeError('Each row must contain exactly four photos.');
+      if (count < 4 || count > 6) throw new TypeError('Each row must contain 4..6 photos.');
     });
     return { ratios: ratios, identity: identity };
   }
@@ -57,9 +57,9 @@
     return [first, height - BORDER - first]; // second includes its 10px top gap
   }
 
-  function currentRows(current, width, height) {
+  function currentRows(current, width, height, ratios) {
     if (!current || !Array.isArray(current.rows) || current.rows.length !== 2) throw new TypeError('Invalid currentLayout rows.');
-    var seen = [], oldTotal = 0;
+    var seen = [], oldTotal = 0, photoCount = 0;
     current.rows.forEach(function (row) {
       if (!row || !positive(row.height) || !Array.isArray(row.groups) || row.groups.length < 2 || row.groups.length > 4) {
         throw new TypeError('Invalid currentLayout row.');
@@ -68,19 +68,24 @@
       var count = 0;
       row.groups.forEach(function (g) {
         var n = g && g.type === 'single' ? 1 : g && g.type === 'dual' ? 2 : 0;
+        var knownHeights = g && g.childHeights != null;
         if (!n || !Array.isArray(g.photoIndices) || g.photoIndices.length !== n || !positive(g.width) ||
-            !Array.isArray(g.childHeights) || g.childHeights.length !== n || !g.childHeights.every(positive) ||
-            g.width <= BORDER || (n === 2 && g.childHeights[1] <= GAP)) throw new TypeError('Invalid currentLayout group geometry.');
-        if (Math.abs(sum(g.childHeights) - (row.height - BORDER)) > Math.max(1, row.height) * 1e-8) {
+            g.width <= BORDER || row.height <= BORDER + (n === 2 ? GAP : 0) ||
+            (knownHeights && (!Array.isArray(g.childHeights) || g.childHeights.length !== n || !g.childHeights.every(positive) ||
+              (n === 2 && g.childHeights[1] <= GAP)))) throw new TypeError('Invalid currentLayout group geometry.');
+        if (knownHeights && Math.abs(sum(g.childHeights) - (row.height - BORDER)) > Math.max(1, row.height) * 1e-8) {
           throw new TypeError('currentLayout children must sum to row height minus 10px.');
         }
         g.photoIndices.forEach(function (index) {
-          if (!Number.isInteger(index) || index < 0 || index > 7 || seen[index]) throw new TypeError('currentLayout must use source indices 0..7 exactly once.');
-          seen[index] = true; count++;
+          if (!Number.isInteger(index) || index < 0 || index >= ratios.length || seen[index]) {
+            throw new TypeError('currentLayout must use every source index exactly once.');
+          }
+          seen[index] = true; count++; photoCount++;
         });
       });
-      if (count !== 4 || !positive(sum(row.groups.map(function (g) { return g.width; })))) throw new TypeError('Invalid currentLayout photo count.');
+      if (count < 4 || count > 6 || !positive(sum(row.groups.map(function (g) { return g.width; })))) throw new TypeError('Invalid currentLayout photo count.');
     });
+    if (photoCount !== ratios.length) throw new TypeError('currentLayout must use every source index exactly once.');
     if (!positive(oldTotal)) throw new TypeError('Invalid currentLayout total height.');
     // A previous plan may come from a different canvas. Preserve identity and scale
     // outer widths/row proportions, then preserve the Duo's INNER height split.
@@ -97,7 +102,8 @@
         if (!sameWidth && index === row.groups.length - 1) w = width - used;
         used += w;
         var child;
-        if (h === row.height) child = g.childHeights.slice();
+        if (g.childHeights == null) child = children(g.photoIndices, ratios, h);
+        else if (h === row.height) child = g.childHeights.slice();
         else if (g.type === 'single') child = [h - BORDER];
         else {
           var inner = h - BORDER - GAP;
@@ -129,11 +135,14 @@
           coverage += (iw / width) * (ih / height) * fill;
         });
       });
-      rowFill.push(sum(rowFills) / 4);
+      rowFill.push(sum(rowFills) / rowFills.length);
     });
-    var meanFill = sum(fills) / 8, minFill = Math.min.apply(Math, fills);
+    var meanFill = sum(fills) / fills.length, minFill = Math.min.apply(Math, fills);
     return { rows: rows, coverage: Math.max(0, Math.min(1, coverage)), meanFill: meanFill,
       minFill: minFill, rowFill: rowFill,
+      photoCount: fills.length, rowPhotoCounts: rows.map(function (row) {
+        return sum(row.groups.map(function (g) { return g.photoIndices.length; }));
+      }),
       quality: meanFill * 0.55 + Math.min.apply(Math, rowFill) * 0.30 + minFill * 0.15 };
   }
 
@@ -239,8 +248,25 @@
       return !requireSingle || shape.some(function (row) { return row.some(function (g) { return g.type === 'single'; }); });
     }
     var input = readInput(rows, width, height), ratios = input.ratios;
-    var oldRows = currentLayout == null ? null : currentRows(currentLayout, width, height);
+    var oldRows = currentLayout == null ? null : currentRows(currentLayout, width, height, ratios);
     var identity = oldRows ? oldRows.map(function (row) { return row.groups.map(function (g) { return group(g.photoIndices); }); }) : input.identity;
+    // Dynamic rows never enter the eight-photo combinatorial optimizer. Resizing
+    // scales current geometry, or fits the supplied shape once if unmeasured.
+    // Topology takes precedence over requireSingle; playback handles recovery.
+    if (ratios.length !== 8 || (options && options.preserveTopology)) {
+      var linearDiagnostics = { partitions: 0, packingCandidates: 0, shortlistCount: 0, evaluatedLayouts: 1,
+        widthSolves: 0, boundedChecks: 0, heightSamples: 1, shortlistLimit: 0, materialThreshold: MATERIAL,
+        decision: 'preserved-topology', reordered: false, preserveTopology: true };
+      var geometry = oldRows || layoutFor(identity, ratios, width, height, height / 2, linearDiagnostics);
+      if (!geometry) throw new RangeError('Canvas is too small for positive bordered photo boxes.');
+      var preserved = measure(geometry, ratios, width, height);
+      linearDiagnostics.bestQuality = preserved.quality;
+      linearDiagnostics.identityQuality = preserved.quality;
+      linearDiagnostics.oldCurrent = oldRows ? { coverage: preserved.coverage, meanFill: preserved.meanFill,
+        minFill: preserved.minFill, rowFill: preserved.rowFill.slice(), quality: preserved.quality } : null;
+      preserved.diagnostics = linearDiagnostics;
+      return preserved;
+    }
     var old = oldRows && permitted(oldRows.map(function (r) { return r.groups; })) ? measure(oldRows, ratios, width, height) : null;
     var reference = positions(identity), rank = [], serial = 0;
     identity.forEach(function (row) { row.forEach(function (g) { g.photoIndices.forEach(function (i) { rank[i] = serial++; }); }); });

@@ -197,7 +197,9 @@
         $gallery.attr("data-photo-status", "ready");
         if (!initialized) {
           initialized = true;
-          $gallery.shiftingtiles(images.slice(), { fallbackPhotos: fallback.slice() });
+          var playbackOptions = { fallbackPhotos: fallback.slice() };
+          if (config.dynamicRows) playbackOptions.dynamicRows = config.dynamicRows;
+          $gallery.shiftingtiles(images.slice(), playbackOptions);
         } else {
           // Replace the photo source in-place; do not duplicate animation timers/events.
           $gallery.trigger("st-photos-update", [images.slice()]);
