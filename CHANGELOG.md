@@ -1,5 +1,13 @@
 # Historial de versiones
 
+## 0.9.3 — 2026-11-24
+
+Corrige la desalineación provocada por el ajuste independiente de las filas en 0.9.2. La ruta alineada usa dos filas de igual altura y tres columnas compartidas; las subdivisiones Duo también comparten su posición horizontal dentro de cada fila. Las celdas conservan los bordes durante las animaciones y sus anchuras se ajustan simultáneamente arriba y abajo, sin permutar las fotografías. Se mantienen ocho fotos iniciales y los cambios ocasionales de cuatro a seis fotos por fila.
+
+Los separadores negros pasan a 4px en total, incluidos Duo y perímetro. Se elimina por completo la capa borrosa y la copia `cover`: las fotos principales usan `contain`, sin recortes ni deformación. El encaje conjunto busca reducir el espacio negro residual, sin prometer llenar cualquier celda con cualquier proporción.
+
+Se conservan la cola del álbum, la precarga atómica y el ritmo nominal de cinco segundos. Se añade el módulo público de reproducción alineada y se actualizan caché, `/acercade`, documentación y regresiones. Sin cambios de backend, sincronización OneDrive, bibliotecas, horarios, recursos Azure ni workflow de despliegue. Las etiquetas anteriores permanecen intactas.
+
 ## 0.9.2 — 2026-11-23
 
 Separadores negros uniformes de 2px en total, entre bloques, entre filas, en el interior de Duo y en el perímetro. Las fotos principales conservan `contain`, sin recortes ni deformación; el fondo desenfocado sigue disponible cuando las proporciones no permiten llenar cada celda.

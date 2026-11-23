@@ -52,7 +52,7 @@
     <section aria-labelledby="descripcion">
       <h2 id="descripcion">Una galería en movimiento</h2>
       <p>Origami es una galería animada de fotos de OneDrive. Comienza con ocho fotos y, cuando hay espacio e imágenes disponibles, algunos bloques se dividen ocasionalmente para mostrar entre cuatro y seis fotos por fila. Mantiene las bibliotecas separadas y convierte las imágenes HEIC para mostrarlas en el navegador.</p>
-      <p>Las fotos se muestran completas, sin recortes ni deformación. Los separadores negros tienen 2 píxeles de grosor, también en el perímetro. La composición tiene en cuenta las proporciones de las fotos y ajusta suavemente las anchuras de los bloques vecinos para reducir el relleno, sin cambiar su orden.</p>
+      <p>Las fotos se muestran completas, sin recortes ni deformación. Los separadores negros tienen 4 píxeles de grosor, también en el perímetro. Las dos filas comparten las mismas columnas y sus divisiones horizontales y verticales permanecen alineadas; las fotos se animan dentro de celdas estables. La composición tiene en cuenta las proporciones y ajusta suavemente las anchuras compartidas para reducir el espacio sobrante, sin cambiar su orden. No hay relleno borroso: cuando el encaje exacto no es posible, queda un margen negro residual.</p>
     </section>
 
     <section aria-labelledby="proyecto">
@@ -78,7 +78,7 @@
     </footer>
   </main>
 
-  <script src="/version.js?v=fit-20261123"></script>
+  <script src="/version.js?v=aligned-20261124"></script>
   <script>
     (function () {
       'use strict';

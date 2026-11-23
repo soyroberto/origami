@@ -27,7 +27,7 @@ function fixture(count = 40, options = {}) {
     if(this === row) return {width: W * 2, height};
     const group = this.parentElement && this.parentElement.classList.contains('dual') ? this.parentElement : this;
     const width = W * 2 * parseFloat(group.style.getPropertyValue('--st-box-width') || (group.classList.contains('dual') ? '10' : '20')) / 100;
-    return group === this ? {width, height} : {width: width - 2, height: (height - 2) * parseFloat(this.style.height || '50') / 100};
+    return group === this ? {width, height} : {width: width - 4, height: (height - 4) * parseFloat(this.style.height || '50') / 100};
   };
   w.Math.random = () => 0.999999;
   for(const file of ['album-queue.js', 'gallery-layout.js', 'shiftingtiles.js']) w.eval(fs.readFileSync(path.join(ROOT, file), 'utf8'));

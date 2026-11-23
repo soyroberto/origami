@@ -2,7 +2,7 @@
 
 Galería animada de fotos de OneDrive, basada en la implementación web de Shifting Tiles. Comienza con ocho fotos —cuatro por fila— y divide o compacta ocasionalmente algunos bloques para mostrar entre cuatro y seis fotos por fila, si el espacio y el álbum lo permiten. Conserva las transiciones Single/Duo y las bibliotecas separadas. El publicador incremental convierte HEIC/HEIF a JPEG para los navegadores, sin modificar los originales OneDrive.
 
-La versión tiene una única definición en `version.js`: **0.9.2**. Su etiqueta es `v0.9.2`; la presentación abreviada es **Origami 0.9**. Las etiquetas históricas `v0.9.0` y `v0.9.1` permanecen intactas.
+La versión tiene una única definición en `version.js`: **0.9.3**. Su etiqueta es `v0.9.3`; la presentación abreviada es **Origami 0.9**. Las etiquetas históricas `v0.9.0`, `v0.9.1` y `v0.9.2` permanecen intactas.
 
 ## Código y configuración
 
@@ -21,7 +21,9 @@ Se reutilizan los recursos existentes. Direcciones del sitio:
 - Galería: https://saauxfotos.z26.web.core.windows.net/
 - Acerca de: https://saauxfotos.z26.web.core.windows.net/acercade
 
-No se añade ninguna liga desde la raíz a `/acercade`, ni texto permanente sobre las fotografías. Los separadores negros tienen 2px en total entre fotos y en el perímetro. Las fotos siguen completas (`contain`), sin deformación ni recortes. El encaje por proporciones reduce el relleno ajustando suavemente las anchuras del bloque entrante y sus vecinos, sin cambiar su orden ni reorganizar toda la pantalla. Las divisiones y el encaje local se configuran en `index.html` mediante `dynamicRows` y `adaptiveLayout`; consulta [reproducción de álbumes](docs/album-playback.md). El fondo desenfocado residual se conserva: no se garantiza eliminar todo el relleno con cualquier combinación de proporciones.
+No se añade ninguna liga desde la raíz a `/acercade`, ni texto permanente sobre las fotografías. Los separadores negros tienen **4px en total** entre fotos, filas, Duo y perímetro. Las dos filas comparten tres columnas y las subdivisiones Duo tienen una altura común; las fotos se reemplazan y animan dentro de celdas estables, sin desalinear los separadores. El encaje por proporciones ajusta suavemente las columnas compartidas de ambas filas, sin permutar fotos ni reorganizar toda la pantalla.
+
+Las fotos siguen completas (`contain`), sin deformación ni recortes. Se elimina la capa borrosa y el duplicado `cover`. Si unas proporciones no pueden llenar exactamente las celdas compartidas, permanece un margen negro residual: no se promete eliminarlo para cualquier foto y resolución. `index.html` habilita `alignedLayout`, que tiene prioridad sobre el ajuste independiente de filas anterior, junto con `dynamicRows` para las divisiones ocasionales; consulta [reproducción de álbumes](docs/album-playback.md).
 
 ## Desarrollo
 

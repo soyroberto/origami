@@ -31,7 +31,8 @@ test('mount forwards composition options only on initial playback, preserving is
   try {
     const dynamicRows = {enabled:true, probability:0.25, minTransitionsBetweenChanges:3, minTileWidth:160, minTileHeight:100};
     const adaptiveLayout = {enabled:true, minGain:0.02, maxNeighbors:1};
-    const config = {libraryId:'instagram', dynamicRows, adaptiveLayout};
+    const alignedLayout = {enabled:true, minGain:0.02, maxNeighbors:1};
+    const config = {libraryId:'instagram', dynamicRows, adaptiveLayout, alignedLayout};
     const controller = f.w.ShiftingTilesPhotos.mount(f.gallery, ['foreign/spotify.jpg'], config);
     assert.equal(f.starts.length, 0);
     assert.equal(f.requests.length, 1);
@@ -40,6 +41,7 @@ test('mount forwards composition options only on initial playback, preserving is
     assert.equal(f.starts.length, 1);
     assert.equal(f.starts[0].options.dynamicRows, dynamicRows);
     assert.equal(f.starts[0].options.adaptiveLayout, adaptiveLayout);
+    assert.equal(f.starts[0].options.alignedLayout, alignedLayout);
     assert.deepEqual(Array.from(f.starts[0].options.fallbackPhotos), []);
     assert.deepEqual(f.starts[0].images, f.images);
     assert.equal(f.w.ShiftingTilesPhotos.mount(f.gallery, [], config), controller);
@@ -63,6 +65,7 @@ test('mount without explicit dynamicRows keeps its original plugin options', () 
     assert.deepEqual(Object.keys(f.starts[0].options), ['fallbackPhotos']);
     assert.equal(f.starts[0].options.dynamicRows, undefined);
     assert.equal(f.starts[0].options.adaptiveLayout, undefined);
+    assert.equal(f.starts[0].options.alignedLayout, undefined);
     controller.stop();
   } finally { f.dom.window.close(); }
 });
@@ -85,7 +88,14 @@ test('root enables a moderate configurable split cadence without extra controls'
     assert.equal(mounts[0].adaptiveLayout.enabled, true);
     assert.equal(mounts[0].adaptiveLayout.minGain, 0.02);
     assert.equal(mounts[0].adaptiveLayout.maxNeighbors, 1);
+    assert.equal(mounts[0].alignedLayout.enabled, true);
+    assert.equal(mounts[0].alignedLayout.minGain, 0.02);
+    assert.equal(mounts[0].alignedLayout.maxNeighbors, 1);
     assert.equal(mounts[0].refreshMs, 60000);
+    const scripts = Array.from(w.document.querySelectorAll('script[src]'), node => node.getAttribute('src').split('?')[0]);
+    assert.ok(scripts.indexOf('album-queue.js') < scripts.indexOf('gallery-aligned-playback.js'));
+    assert.ok(scripts.indexOf('gallery-layout.js') < scripts.indexOf('gallery-aligned-playback.js'));
+    assert.ok(scripts.indexOf('gallery-aligned-playback.js') < scripts.indexOf('shiftingtiles.js'));
     assert.equal(w.document.querySelectorAll('a,button,input').length, 0);
   } finally { dom.window.close(); }
 });

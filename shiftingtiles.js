@@ -7,6 +7,11 @@
     return this.each(function() {
       var where = $(this), previous = where.data("shiftingtiles-playback");
       if(previous) return;
+      if(settings.alignedLayout && settings.alignedLayout.enabled === true &&
+        window.ShiftingTilesAlignedPlayback && typeof window.ShiftingTilesAlignedPlayback.create === "function") {
+        window.ShiftingTilesAlignedPlayback.create(where, images, settings);
+        return;
+      }
       var queue = window.ShiftingTilesAlbumQueue.create(images);
       var namespace = ".shiftingtiles" + (++instanceNumber);
       var timeout = null, pending = null, active = null, destroyed = false;
@@ -26,7 +31,7 @@
       adaptive.minGain = typeof adaptive.minGain === "number" && isFinite(adaptive.minGain) && adaptive.minGain >= 0 ? adaptive.minGain : 0.02;
       adaptive.maxNeighbors = 1;
       var localFits = 0, lastLocalFit = null;
-      var BORDER = 2, GAP = 2;
+      var BORDER = 4, GAP = 4;
 
       function adaptiveAvailable() {
         return adaptive.enabled && window.ShiftingTilesLayout &&
@@ -188,7 +193,7 @@
         var firstWeight = slots[0].height / slots[0].width;
         var secondWeight = slots[1].height / slots[1].width;
         var first = usable * firstWeight / (firstWeight + secondWeight);
-        // The second CSS border-box includes the two-pixel separator.
+        // The second CSS border-box includes the four-pixel separator.
         return [first, usable - first + GAP];
       }
 
@@ -626,6 +631,7 @@
           state.structureChanges = structureChanges;
           state.dynamicRowsEnabled = dynamic.enabled;
           state.adaptiveLayoutEnabled = adaptive.enabled;
+          state.alignedLayoutEnabled = false;
           state.localFits = localFits;
           if(lastLocalFit) state.lastLocalFit = $.extend({}, lastLocalFit, {localRange: lastLocalFit.localRange.slice()});
           return state;

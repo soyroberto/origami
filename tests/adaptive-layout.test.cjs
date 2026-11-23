@@ -20,7 +20,7 @@ function measured(groups, W, H, widths) {
   let coverage = 0;
   const fills = [];
   groups.forEach((g, i) => g.photoIndices.forEach((index, child) => {
-    const iw = widths[i] - 2, ih = g.childHeights[child] - (child ? 2 : 0);
+    const iw = widths[i] - 4, ih = g.childHeights[child] - (child ? 4 : 0);
     const ratio = groups.ratios[index];
     const fill = Math.exp(-Math.abs(Math.log(ratio) - (Math.log(iw) - Math.log(ih))));
     fills.push(fill);
@@ -39,14 +39,14 @@ function verify(result, input, W, H, currentWidths, range) {
     assert.equal(g.type, input[i].type, 'no topology changes or permutations');
     assert.equal(g.photoIndices.length, input[i].ratios.length);
     assert.equal(g.childHeights.length, g.photoIndices.length);
-    assert.ok(Number.isFinite(g.width) && g.width > 2);
+    assert.ok(Number.isFinite(g.width) && g.width > 4);
     if (i < range[0] || i > range[1]) assert.equal(g.width, currentWidths[i], 'outside width is EXACT, not scaled');
-    close(sum(g.childHeights), H - 2);
-    if (g.type === 'single') assert.equal(g.childHeights[0], H - 2);
+    close(sum(g.childHeights), H - 4);
+    if (g.type === 'single') assert.equal(g.childHeights[0], H - 4);
     g.photoIndices.forEach((index, child) => {
       indices.push(index);
-      const iw = g.width - 2, ih = g.childHeights[child] - (child ? 2 : 0), ratio = ratios[index];
-      assert.ok(Number.isFinite(ih) && ih > 0, 'Duo gap is exactly 2px and leaves a positive inner box');
+      const iw = g.width - 4, ih = g.childHeights[child] - (child ? 4 : 0), ratio = ratios[index];
+      assert.ok(Number.isFinite(ih) && ih > 0, 'Duo gap is exactly 4px and leaves a positive inner box');
       // Log-space checks preserve contain/aspect assertions even where a physical
       // rendered dimension or scale would underflow or lose subnormal precision.
       const logScale = Math.min(Math.log(iw) - Math.log(ratio), Math.log(ih));
@@ -66,8 +66,8 @@ function verify(result, input, W, H, currentWidths, range) {
       }
     });
     if (g.type === 'dual' && input[i].ratios.every(r => r >= 1e-8 && r <= 1e8)) {
-      close(g.childHeights[0] * input[i].ratios[0], (g.childHeights[1] - 2) * input[i].ratios[1]);
-      close(g.childHeights[0], (H - 4) * input[i].ratios[1] / sum(input[i].ratios));
+      close(g.childHeights[0] * input[i].ratios[0], (g.childHeights[1] - 4) * input[i].ratios[1]);
+      close(g.childHeights[0], (H - 8) * input[i].ratios[1] / sum(input[i].ratios));
     }
   });
   assert.deepEqual(indices, ratios.map((_, i) => i), 'photo indices are local, complete and in original order');
@@ -136,10 +136,10 @@ for (const fixture of fixtures) {
   });
 }
 
-test('CommonJS and browser UMD expose the exact API and frozen 2px geometry', () => {
+test('CommonJS and browser UMD expose the exact API and frozen 4px geometry', () => {
   const layout = require('../gallery-layout.js');
-  assert.deepEqual(Object.keys(layout).sort(), ['geometry', 'plan', 'refitRow']);
-  assert.deepEqual(geometry, { border: 2, gap: 2, separator: 2 });
+  assert.deepEqual(Object.keys(layout).sort(), ['geometry', 'plan', 'planAligned', 'refitRow']);
+  assert.deepEqual(geometry, { border: 4, gap: 4, separator: 4 });
   assert.ok(Object.isFrozen(geometry));
   assert.throws(() => { geometry.border = 10; }, TypeError);
   for (const context of [{}, { window: {} }]) {
@@ -147,6 +147,7 @@ test('CommonJS and browser UMD expose the exact API and frozen 2px geometry', ()
     const exported = context.window ? context.window.ShiftingTilesLayout : context.ShiftingTilesLayout;
     assert.equal(typeof exported.plan, 'function');
     assert.equal(typeof exported.refitRow, 'function');
+    assert.equal(typeof exported.planAligned, 'function');
     assert.equal(JSON.stringify(exported.geometry), JSON.stringify(geometry));
     assert.ok(Object.isFrozen(exported.geometry));
   }
@@ -223,8 +224,8 @@ test('extreme finite natural aspects stay finite across normal, minimal and huge
     [single(Number.MIN_VALUE), single(Number.MAX_VALUE), single(1e-300), single(1e300)]
   ];
   for (const groups of shapes) {
-    const tinyW = groups.length * 2 + 1e-10;
-    for (const [W, H] of [[1915, 462], [1024, 384], [390, 422], [tinyW, 4 + 1e-10], [Number.MAX_VALUE, Number.MAX_VALUE]]) {
+    const tinyW = groups.length * 4 + 2e-10;
+    for (const [W, H] of [[1915, 462], [1024, 384], [390, 422], [tinyW, 8 + 2e-10], [Number.MAX_VALUE, Number.MAX_VALUE]]) {
       const widths = widthsAt(W, groups.map(() => 1 / groups.length));
       for (let anchor = 0; anchor < groups.length; anchor++) {
         const result = refitRow(groups, W, H, widths, { anchorIndex: anchor, maxNeighbors: 1 });
@@ -236,7 +237,7 @@ test('extreme finite natural aspects stay finite across normal, minimal and huge
 
 test('local width bounds may be infeasible on a tiny canvas, but the baseline stays valid', () => {
   const groups = [dual(0.6, 1.6), dual(1, 1)];
-  const widths = [2.00000000005, 2.00000000005], W = sum(widths), H = 4.0000000001;
+  const widths = [4.0000000001, 4.0000000001], W = sum(widths), H = 8.0000000002;
   const result = refitRow(groups, W, H, widths, { anchorIndex: 0, maxNeighbors: 1 });
   verify(result, groups, W, H, widths, [0, 1]);
   assert.deepEqual(result.groups.map(g => g.width), widths);
@@ -272,12 +273,12 @@ test('invalid shapes, aspects, widths, canvas sizes and options fail explicitly'
   for (const current of [null, {}, [], [800], [400, 400, 1], [0, 800], [-1, 801], [NaN, 400], [Infinity, 400], ['400', 400], [400, ,]]) {
     assert.throws(() => fit(groups, W, H, current), TypeError);
   }
-  for (const current of [[2, 798], [1, 799], [400, 399]]) assert.throws(() => fit(groups, W, H, current), RangeError);
-  for (const w of [0, -1, 4, NaN, Infinity, '800']) assert.throws(() => fit(groups, w), RangeError);
-  for (const h of [0, -1, 4, NaN, Infinity, '400']) assert.throws(() => fit(groups, W, h), RangeError);
+  for (const current of [[4, 796], [1, 799], [400, 399]]) assert.throws(() => fit(groups, W, H, current), RangeError);
+  for (const w of [0, -1, 8, NaN, Infinity, '800']) assert.throws(() => fit(groups, w), RangeError);
+  for (const h of [0, -1, 8, NaN, Infinity, '400']) assert.throws(() => fit(groups, W, h), RangeError);
   const singles = Array.from({ length: 4 }, () => single(1));
-  assert.throws(() => fit(singles, 8, H, [2, 2, 2, 2]), RangeError);
-  assert.throws(() => fit(singles, W, 2, [200, 200, 200, 200]), RangeError);
+  assert.throws(() => fit(singles, 16, H, [4, 4, 4, 4]), RangeError);
+  assert.throws(() => fit(singles, W, 4, [200, 200, 200, 200]), RangeError);
   for (const options of [null, [], {}, { anchorIndex: 0.5 }, { anchorIndex: '0' }, { anchorIndex: NaN },
     { anchorIndex: 0, maxNeighbors: 0.5 }, { anchorIndex: 0, maxNeighbors: '1' }, { anchorIndex: 0, maxNeighbors: null }]) {
     assert.throws(() => fit(groups, W, H, widths, options), TypeError);

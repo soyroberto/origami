@@ -25,8 +25,8 @@ function fixture(count = 40, options = {}) {
     const isRow = this.classList.contains('row');
     let width = isRow ? 2000 : boxWidth, height = rowHeight;
     if (this.parentElement && this.parentElement.classList.contains('dual')) {
-      width -= 2;
-      height = parseFloat(this.style.height || '50') / 100 * (rowHeight - 2);
+      width -= 4;
+      height = parseFloat(this.style.height || '50') / 100 * (rowHeight - 4);
     }
     return {x: 0, y: 0, top: 0, left: 0, width, height, right: width, bottom: height};
   };
@@ -142,10 +142,10 @@ test('split preloads ALL slots, preserves position, outer width properties and r
   assert.deepEqual(f.counts(), [5, 4], 'outgoing is excluded from stable row counts');
   assert.equal(f.api.stats().visibleURLs.length, 10, 'outgoing is still excluded from queue eligibility');
   assert.equal(f.api.stats().structureChanges, 0, 'count only finished changes');
-  const heights = incoming.children().toArray().map(node => parseFloat(node.style.height) / 100 * 418);
-  assert.ok(Math.abs(heights[0] - 416 / 3) < 1e-8);
-  assert.ok(Math.abs(heights[1] - (832 / 3 + 2)) < 1e-8);
-  assert.ok(Math.abs(heights[0] + heights[1] - 418) < 1e-8);
+  const heights = incoming.children().toArray().map(node => parseFloat(node.style.height) / 100 * 416);
+  assert.ok(Math.abs(heights[0] - 412 / 3) < 1e-8);
+  assert.ok(Math.abs(heights[1] - (824 / 3 + 4)) < 1e-8);
+  assert.ok(Math.abs(heights[0] + heights[1] - 416) < 1e-8);
   assert.equal(f.api.frame(), false);
   f.end(); unique(f);
   assert.equal(row.children()[0], incoming[0]);

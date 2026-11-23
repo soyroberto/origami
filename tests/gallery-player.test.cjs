@@ -23,7 +23,7 @@ function fixture() {
   });
   const state = { albumSize: 443, loading: false, animating: false };
   g.data('shiftingtiles-playback', { stats: () => state });
-  w.ShiftingTilesLayout = { plan: () => { plans++; return { rows: [0, 1].map(r => ({ height: height / 2, groups: [0, 1, 2, 3].map(i => ({ type: 'single', photoIndices: [r * 4 + i], width: width / 4, childHeights: [height / 2 - 2] })) })) }; } };
+  w.ShiftingTilesLayout = { plan: () => { plans++; return { rows: [0, 1].map(r => ({ height: height / 2, groups: [0, 1, 2, 3].map(i => ({ type: 'single', photoIndices: [r * 4 + i], width: width / 4, childHeights: [height / 2 - 4] })) })) }; } };
   return { dom, w, $, g, state, queue, plans: () => plans, flush: () => { const fns = Array.from(queue.values()); queue.clear(); fns.forEach(fn => fn()); }, resize: (x, y) => { width = x; height = y; resize(); } };
 }
 test('initial fit preserves eight loaded URLs and metadata, without requesting images', () => {
@@ -87,7 +87,7 @@ function geometryFixture(counts = [5, 6], variant = 0, unknownChildren = false) 
         group.style.setProperty('--st-box-width', fraction * 50 + '%');
         group.style.setProperty('--st-start-width', fraction * 50 + '%');
         group.getBoundingClientRect = () => ({ width: parseFloat(group.style.getPropertyValue('--st-box-width')) / 50 * f.g[0].clientWidth,
-          height: row.getBoundingClientRect().height - 2 });
+          height: row.getBoundingClientRect().height - 4 });
         const leaves = n === 1 ? [group] : [f.w.document.createElement('div'), f.w.document.createElement('div')];
         leaves.forEach((leaf, c) => {
           const id = photoSerial++, marker = {};
@@ -97,9 +97,9 @@ function geometryFixture(counts = [5, 6], variant = 0, unknownChildren = false) 
           if (n === 2) {
             leaf.getBoundingClientRect = () => {
               const height = row.getBoundingClientRect().height;
-              return { width: group.getBoundingClientRect().width - 2,
-                height: unknownChildren ? 0 : leaf.style.height ? parseFloat(leaf.style.height) / 100 * (height - 2) :
-                  c ? height - 2 - (height - 4) * 0.42 : (height - 4) * 0.42 };
+              return { width: group.getBoundingClientRect().width - 4,
+                height: unknownChildren ? 0 : leaf.style.height ? parseFloat(leaf.style.height) / 100 * (height - 4) :
+                  c ? height - 4 - (height - 8) * 0.42 : (height - 8) * 0.42 };
             };
             group.appendChild(leaf);
           }
@@ -131,11 +131,11 @@ function verifyDomGeometry(f, counts, W, H) {
     near(groups.reduce((n, group) => n + group.getBoundingClientRect().width, 0), W);
     groups.forEach(group => {
       assert.equal(group.style.getPropertyValue('--st-box-width'), group.style.getPropertyValue('--st-start-width'));
-      assert.ok(group.getBoundingClientRect().width > 2);
+      assert.ok(group.getBoundingClientRect().width > 4);
       if (f.$(group).hasClass('dual')) {
         near(Array.from(group.children).reduce((n, leaf) => n + parseFloat(leaf.style.height), 0), 100);
         assert.ok(parseFloat(group.children[0].style.height) > 0);
-        assert.ok(parseFloat(group.children[1].style.height) / 100 * (height - 2) > 2);
+        assert.ok(parseFloat(group.children[1].style.height) / 100 * (height - 4) > 4);
       }
     });
   });
@@ -174,7 +174,7 @@ test('unmeasured Duo children keep outer widths and derive inverse-aspect height
     verifyDomGeometry(f, [5, 6], 1600, 800);
     const result = c.metrics(), ratios = f.calls[0].rows.flatMap(row => row.flatMap(group => group.ratios));
     result.rows.forEach(row => row.groups.filter(group => group.type === 'dual').forEach(group => {
-      near(group.childHeights[0] * ratios[group.photoIndices[0]], (group.childHeights[1] - 2) * ratios[group.photoIndices[1]]);
+      near(group.childHeights[0] * ratios[group.photoIndices[0]], (group.childHeights[1] - 4) * ratios[group.photoIndices[1]]);
     }));
     c.destroy();
   } finally { f.dom.window.close(); }

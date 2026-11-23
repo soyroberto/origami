@@ -27,7 +27,7 @@ function fixture(options = {}) {
     if(this === row) return {width:2*W,height};
     const group = this.parentElement && this.parentElement.classList.contains('dual') ? this.parentElement : this;
     const width = 2*W*parseFloat(group.style.getPropertyValue('--st-box-width') || (group.classList.contains('dual')?'10':'20'))/100;
-    if(group !== this) return {width:width-2,height:(height-2)*parseFloat(this.style.height || '50')/100};
+    if(group !== this) return {width:width-4,height:(height-4)*parseFloat(this.style.height || '50')/100};
     return {width,height};
   };
   w.Math.random = () => 0.999999;

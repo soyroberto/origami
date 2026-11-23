@@ -13,7 +13,7 @@
     var needsFit = true, raf = null, destroyed = false, observer = null;
     var lastWidth = 0, lastHeight = 0, last = null, fits = 0;
     var preserveTopology = false, structureBaseline = 0, localFitBaseline = 0;
-    var BORDER = 2, GAP = 2;
+    var BORDER = 4, GAP = 4;
 
     function positive(value) {
       return typeof value === 'number' && isFinite(value) && value > 0;
@@ -128,7 +128,7 @@
 
     function flush() {
       raf = null;
-      if (destroyed || !needsFit || $gallery.find('.disappear').length ||
+      if (destroyed || $gallery.hasClass('gallery-aligned') || !needsFit || $gallery.find('.disappear').length ||
           $gallery.hasClass('leave') || $gallery.hasClass('left')) return;
       var playback = $gallery.data('shiftingtiles-playback');
       var state = playback && playback.stats ? playback.stats() : null;

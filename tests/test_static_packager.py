@@ -24,7 +24,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('gallery-source.js', selected)
         with self.assertRaises(ValueError):
             packager.select_files(tracked - {'gallery-source.js'})
-        for module in ('album-queue.js', 'gallery-layout.js', 'gallery-player.js', 'version.js', 'acercade.html'):
+        for module in ('album-queue.js', 'gallery-layout.js', 'gallery-player.js', 'gallery-aligned-playback.js', 'version.js', 'acercade.html'):
             self.assertIn(module, selected)
             with self.assertRaises(ValueError):
                 packager.select_files(tracked - {module})
@@ -44,6 +44,7 @@ class PackagingTests(unittest.TestCase):
             selected = packager.package(repo, out)
             self.assertEqual(len(selected), len(packager.REQUIRED_FILES) + 1)
             self.assertTrue((out / 'assets/gallery-source.js').is_file())
+            self.assertTrue((out / 'assets/gallery-aligned-playback.js').is_file())
             self.assertFalse((out / 'assets/gallery.json').exists())
             self.assertEqual((out / 'assets/f1.jpeg').read_bytes(), b'unchanged-original-fixture')
             self.assertEqual((out / 'entrypoint/index.html').read_bytes(), (ROOT / 'index.html').read_bytes())

@@ -54,7 +54,7 @@ html, body {
 }
 
 @disappear-duration: 1s;
-@separator: 2px;
+@separator: 4px;
 @tile-border: (@separator / 2);
 
 .shiftingtiles {
@@ -64,20 +64,20 @@ html, body {
 	height: 100dvh;
 	overflow: hidden;
 	box-sizing: border-box;
-	/* Outer 1px plus the edge tile's 1px makes the same 2px perimeter. */
+	/* Outer 2px plus the edge cell's 2px makes the same 4px perimeter. */
 	border: @tile-border solid black;
 
 	.image() {
 		position: relative;
 		isolation: isolate;
 		overflow: hidden;
-		background-color: #242424;
-		/* Both layers inherit the single image set by the existing loader. */
+		background-color: black;
+		/* One contained photo only: residual space stays black, never blurred. */
 		background-size: 0 0;
 		background-position: center;
 		background-repeat: no-repeat;
 
-		&::before, &::after {
+		&::after {
 			content: "";
 			position: absolute;
 			top: 0;
@@ -88,17 +88,6 @@ html, body {
 			background-position: center;
 			background-repeat: no-repeat;
 			pointer-events: none;
-		}
-		&::before {
-			/* Overscan keeps transparent blur edges outside the visible tile. */
-			top: -48px;
-			right: -48px;
-			bottom: -48px;
-			left: -48px;
-			z-index: 0;
-			background-size: cover;
-			-webkit-filter: blur(16px);
-			filter: blur(16px);
 		}
 		&::after {
 			z-index: 1;
@@ -132,7 +121,7 @@ html, body {
 			float: left;
 			height: 100%;
 			box-sizing: border-box;
-			/* Two adjacent 1px borders share a 2px black separator. */
+			/* Two adjacent 2px borders share a 4px black separator. */
 			border: @tile-border solid black;
 		}
 		.single { 
@@ -177,6 +166,60 @@ html, body {
 		.dual:not(.disappear) > div {
 			.transition(height @disappear-duration ease);
 		}
+	}
+	/* Paired slots, not the animated photo faces, own the shared divisions. */
+	&.gallery-aligned > .row {
+		width: 100%;
+		height: 50%;
+		margin-left: 0;
+		float: none;
+		.st-slot {
+			position: absolute;
+			top: 0;
+			height: 100%;
+			box-sizing: border-box;
+			border: @tile-border solid black;
+			background: black;
+			overflow: hidden;
+			&[data-st-column="0"] { left: var(--st-left-0, 0%); width: var(--st-col-0, 33.333333333333%); }
+			&[data-st-column="1"] { left: var(--st-left-1, 33.333333333333%); width: var(--st-col-1, 33.333333333333%); }
+			&[data-st-column="2"] { left: var(--st-left-2, 66.666666666667%); width: var(--st-col-2, 33.333333333334%); }
+			> .single, > .dual {
+				position: absolute;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				float: none;
+				margin: 0;
+				border: 0;
+				background-color: black;
+				--st-start-width: 100%;
+			}
+			> .dual > div {
+				/* These resolve immediately against the live cell, not an old viewport. */
+				height: ~"calc(50% + 2px)";
+				.transition(none);
+			}
+			> .dual > div:first-child {
+				height: ~"calc(50% - 2px)";
+			}
+			/* The Duo divider stays fixed while its outgoing face shrinks. */
+			&:has(> .dual)::after {
+				content: "";
+				position: absolute;
+				left: 0;
+				right: 0;
+				top: ~"calc(50% - 2px)";
+				height: @separator;
+				background: black;
+				pointer-events: none;
+				z-index: 5;
+			}
+		}
+	}
+	&.gallery-aligned.gallery-fitting > .row .st-slot {
+		.transition(~"left 1s ease, width 1s ease");
 	}
 }
 
