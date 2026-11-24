@@ -1,5 +1,13 @@
 # Historial de versiones
 
+## 0.9.5 — 2026-11-24
+
+Se publica la opción A, elegida y aprobada visualmente por el propietario tras comparar dos variantes locales. Se elimina la copia ampliada y desenfocada de cada foto: una única capa `cover` llena la casilla sin deformación ni relleno añadido, admitiendo los recortes necesarios. Se conserva la cuadrícula modular de 0.9.4, sus separadores de 5px por borde y 10px interiores, y las transiciones y el ritmo originales.
+
+La selección por proporciones examina hasta tres candidatas Single o seis Duo, con dos cargas simultáneas durante las transiciones y hasta 64 entradas de dimensiones. La prioridad por antigüedad limita las postergaciones elegibles y mantiene el recorrido completo de la biblioteca. Se conservan la precarga atómica, la exclusión de fotos visibles y salientes, las cuatro a seis fotos por fila y las bibliotecas separadas.
+
+Se actualizan la versión central, la caché pública, `/acercade`, la documentación y las pruebas. No se publican la opción B, la comparación ni su semilla de prueba. Backend, sincronización OneDrive, workflow, configuración Azure y repositorio legado sin cambios. El administrador de bibliotecas queda para una etapa posterior; las etiquetas históricas permanecen intactas.
+
 ## 0.9.4 — 2026-11-24
 
 Se recupera un patrón modular común entre las filas, basado en la referencia original: los bloques ocupan múltiplos de una misma medida de ancho y cada fila puede combinarlos de distinta manera o tener distinta cantidad de grupos. No se imponen tres columnas idénticas. Los bloques Duo comparten un eje horizontal y las dos filas ocupan mitades de la altura disponible.

@@ -88,6 +88,20 @@
       return selected;
     }
 
+    // Opt-in lookahead: preserve the minimum's atomicity, including odd tails
+    // and cycle resets, then reserve individual unseen candidates (never > 6).
+    function reserveCandidates(count, maximum, excludedArray) {
+      if(!Number.isInteger(maximum) || maximum < count || maximum > 6) return [];
+      var selected = reserve(count, excludedArray);
+      if(!selected.length) return selected;
+      while(selected.length < maximum) {
+        var next = reserve(1, excludedArray);
+        if(!next.length) break;
+        selected.push(next[0]);
+      }
+      return selected;
+    }
+
     function commit(url) {
       if(!members[url] || !reserved[url]) return false;
       delete reserved[url];
@@ -127,7 +141,8 @@
     }
 
     setImages(images);
-    return {setImages: setImages, reserve: reserve, commit: commit, release: release, fail: fail, stats: stats};
+    return {setImages: setImages, reserve: reserve, reserveCandidates: reserveCandidates,
+      commit: commit, release: release, fail: fail, stats: stats};
   }
 
   return {create: create};

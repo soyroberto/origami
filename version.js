@@ -13,5 +13,5 @@
     meta.content = app.version;
   }
 }(typeof window !== 'undefined' ? window : null, function () {
-  return Object.freeze({ name: 'Origami', version: '0.9.4' });
+  return Object.freeze({ name: 'Origami', version: '0.9.5' });
 }));

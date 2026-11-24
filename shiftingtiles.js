@@ -3,7 +3,7 @@
   var instanceNumber = 0;
 
   $.fn.shiftingtiles = function(images, options) {
-    var settings = $.extend({photosource: images, duration: 5000, fallbackPhotos: []}, options);
+    var settings = $.extend({photosource: images, duration: 5000, fallbackPhotos: [], aspectSelection: false}, options);
     return this.each(function() {
       var where = $(this), previous = where.data("shiftingtiles-playback");
       if(previous) return;
@@ -15,6 +15,9 @@
       var duration = Number(settings.duration) > 0 ? Number(settings.duration) : 5000;
       var dynamic = $.extend({enabled: false, probability: 0.25,
         minTransitionsBetweenChanges: 3, minTileWidth: 160, minTileHeight: 100}, settings.dynamicRows);
+      var aspectSelection = settings.aspectSelection === true;
+      var aspectCache = Object.create(null), cacheOrder = [], deferred = Object.create(null);
+      var aspectCycle = queue.stats().cycle;
       dynamic.enabled = dynamic.enabled === true;
       dynamic.probability = Math.max(0, Math.min(1, Number(dynamic.probability) || 0));
       dynamic.minTransitionsBetweenChanges = Math.max(0, Math.floor(Number(dynamic.minTransitionsBetweenChanges) || 0));
@@ -124,6 +127,136 @@
         return urls;
       }
 
+      function reserveAspect(count) {
+        var before = queue.stats().cycle;
+        var urls = queue.reserveCandidates(count, Math.min(6, count * 3), visibleURLs());
+        if(queue.stats().cycle !== aspectCycle) {
+          deferred = Object.create(null);
+          aspectCycle = queue.stats().cycle;
+        }
+        if(queue.stats().cycle !== before) where.trigger("st-galleryrestart");
+        // A Duo→Single decision has fewer seats: candidates already at their
+        // deadline wait outside this decision rather than accruing a fourth
+        // deferral behind another forced photo.
+        var admitted = [];
+        urls.sort(function(a, b) { return (deferred[b] || 0) - (deferred[a] || 0); });
+        urls.forEach(function(url) {
+          if(admitted.length + 1 <= count * (4 - (deferred[url] || 0))) admitted.push(url);
+          else queue.release(url);
+        });
+        return admitted;
+      }
+
+      function rememberAspect(slot) {
+        if(!aspectSelection) return;
+        var index = cacheOrder.indexOf(slot.url);
+        if(index !== -1) cacheOrder.splice(index, 1);
+        // Metadata only, not a growing collection of decoded Image objects.
+        aspectCache[slot.url] = {width: slot.width, height: slot.height};
+        cacheOrder.push(slot.url);
+        while(cacheOrder.length > 64) delete aspectCache[cacheOrder.shift()];
+      }
+
+      function selectAspect(transaction) {
+        if(!current(transaction) || transaction.selectionReady ||
+          !transaction.candidates.every(function(slot) { return slot.settled; })) return;
+        var loaded = transaction.candidates.filter(function(slot) { return slot.loaded || slot.cached; });
+        var count = transaction.targetCount;
+        if(loaded.length < count) { cancelPending(); schedule(); return; }
+        // EDF feasibility: reserve enough seats NOW that every examined photo
+        // can be shown after at most three eligible deferrals, not just one of
+        // several overdue photos. Single examines 3, Duo at most 6.
+        var oldest = loaded.slice().sort(function(a, b) {
+          return (deferred[b.url] || 0) - (deferred[a.url] || 0) ||
+            transaction.candidates.indexOf(a) - transaction.candidates.indexOf(b);
+        });
+        function required(seats) {
+          var n = 0;
+          oldest.forEach(function(slot, index) {
+            n = Math.max(n, index + 1 - seats * (3 - (deferred[slot.url] || 0)));
+          });
+          return oldest.slice(0, Math.min(seats, n));
+        }
+        var size = measure(transaction.outgoing), modular = where.hasClass('gallery-modular');
+        var width = Math.max(1, size.width - 10), height = Math.max(1, size.height - 10);
+        function mismatch(ratio, target) { return Math.abs(Math.log(ratio / target)); }
+        function score(slots) {
+          if(slots.length === 1) return mismatch(slots[0].width / slots[0].height, width / height);
+          var heights = duoHeights(size, slots);
+          if(transaction.structureChange && (heights[0] < dynamic.minTileHeight ||
+            heights[1] - 10 < dynamic.minTileHeight)) return Infinity;
+          if(!modular) {
+            // Natural Duo has ONE shared width and inverse-aspect heights.
+            // Compare its joint footprint, not the old/fixed 50/50 leaves.
+            var naturalWidth = Math.max(1, size.height - 20) /
+              (slots[0].height / slots[0].width + slots[1].height / slots[1].width);
+            return mismatch(naturalWidth, width);
+          }
+          return mismatch(slots[0].width / slots[0].height, width / Math.max(1, heights[0])) +
+            mismatch(slots[1].width / slots[1].height, width / Math.max(1, heights[1] - 10));
+        }
+        function best(seats) {
+          var forced = required(seats), result = null, lowest = Infinity;
+          function consider(slots) {
+            if(!forced.every(function(slot) { return slots.indexOf(slot) !== -1; })) return;
+            var value = score(slots);
+            if(value < lowest) { lowest = value; result = slots; }
+          }
+          loaded.forEach(function(a) {
+            if(seats === 1) consider([a]);
+            else loaded.forEach(function(b) { if(a !== b) consider([a, b]); });
+          });
+          return result;
+        }
+        var chosen = best(count);
+        if(!chosen && transaction.structureChange && transaction.outgoing.hasClass('single')) {
+          // Extreme ratios must not be trapped in an impossible split forever.
+          count = 1;
+          chosen = best(count);
+          // The 6-candidate split pool exceeds a Single's fairness capacity.
+          // Unchosen candidates cannot fit this attempted structural change;
+          // do not age them for a decision in which they were not eligible.
+          chosen = [oldest[0]];
+          transaction.eligible = chosen;
+          transaction.structureChange = false;
+        }
+        if(!chosen) { cancelPending(); schedule(); return; }
+        transaction.eligible = transaction.eligible || loaded;
+        transaction.slots = chosen;
+        transaction.candidates.forEach(function(slot) {
+          if(chosen.indexOf(slot) === -1) queue.release(slot.url);
+        });
+        transaction.selectionReady = true;
+        // Metadata is NOT proof of a current preload. Cached winners still
+        // need a fresh Image/onload/marker before atomic activation. Each URL
+        // therefore starts at most one Image in this transaction (<= 6).
+        chosen.forEach(function(slot) {
+          if(!slot.loaded && current(transaction)) {
+            slot.settled = false;
+            loadSlot(transaction, slot);
+          }
+        });
+        activate(transaction);
+      }
+
+      function pumpAspect(transaction) {
+        if(!current(transaction)) return;
+        var running = transaction.candidates.filter(function(slot) { return slot.image && !slot.settled; }).length;
+        transaction.candidates.forEach(function(slot) {
+          if(running >= 2 || slot.started || !current(transaction)) return;
+          slot.started = true;
+          var cached = aspectCache[slot.url];
+          if(cached) {
+            slot.width = cached.width; slot.height = cached.height;
+            slot.cached = slot.settled = true;
+          } else {
+            running++;
+            loadSlot(transaction, slot);
+          }
+        });
+        selectAspect(transaction);
+      }
+
       function acknowledgeHeldPhotos() {
         // A small album cannot atomically replace a Duo with only one spare.
         // When no unseen offscreen photo remains, photos continuously visible
@@ -167,7 +300,7 @@
         var transaction = pending;
         pending = null;
         transaction.cancelled = true;
-        transaction.slots.forEach(function(slot) {
+        (transaction.candidates || transaction.slots).forEach(function(slot) {
           cleanRequest(slot);
           queue.release(slot.url);
         });
@@ -210,6 +343,7 @@
 
       function activate(transaction) {
         if(!current(transaction) || transaction.kind !== "transition" ||
+          (transaction.candidates && !transaction.selectionReady) ||
           !transaction.slots.every(function(slot) { return slot.loaded; }) || document.hidden || active) return;
         // Clone only after preload. Its old backgrounds are overwritten while detached.
         var outgoing = transaction.outgoing;
@@ -228,6 +362,10 @@
         if(!current(transaction) || document.hidden) return;
         var photos = incoming.hasClass("single") ? incoming : incoming.children();
         photos.each(function(index) { setPhoto($(this), transaction.slots[index]); });
+        if(transaction.candidates) transaction.eligible.forEach(function(slot) {
+          if(transaction.slots.indexOf(slot) !== -1) delete deferred[slot.url];
+          else deferred[slot.url] = (deferred[slot.url] || 0) + 1;
+        });
         transaction.slots.forEach(function(slot) { queue.commit(slot.url); });
         pending = null;
         active = {outgoing: outgoing, incoming: incoming, structureChange: transaction.structureChange};
@@ -259,6 +397,15 @@
           cleanup();
           queue.fail(slot.url);
           transaction.failedURLs.push(slot.url);
+          if(transaction.candidates) {
+            delete aspectCache[slot.url];
+            delete deferred[slot.url];
+            slot.cached = false;
+            slot.settled = true;
+            if(transaction.structureChange || transaction.selectionReady) { cancelPending(); schedule(); }
+            else pumpAspect(transaction);
+            return;
+          }
           if(transaction.structureChange) {
             // Structural changes are atomic: any failure retains the old type,
             // URLs and geometry, including a sibling that already loaded.
@@ -289,6 +436,12 @@
           slot.width = Number(image.naturalWidth || image.width) || 1;
           slot.height = Number(image.naturalHeight || image.height) || 1;
           slot.loaded = slot.settled = true;
+          rememberAspect(slot);
+          if(transaction.candidates) {
+            if(transaction.selectionReady) activate(transaction);
+            else pumpAspect(transaction);
+            return;
+          }
           if(transaction.kind === "initial") {
             setPhoto(slot.element, slot);
             queue.commit(slot.url);
@@ -302,11 +455,11 @@
         image.src = slot.url;
       }
 
-      function startTransaction(kind, urls, elements, outgoing) {
+      function startTransaction(kind, urls, elements, outgoing, targetCount) {
         var transaction = {
           kind: kind, generation: generation, cancelled: false, outgoing: outgoing,
           structureChange: kind === "transition" && outgoing &&
-            urls.length !== (outgoing.hasClass("dual") ? 2 : 1),
+            (targetCount || urls.length) !== (outgoing.hasClass("dual") ? 2 : 1),
           failedURLs: [],
           slots: urls.map(function(url, index) {
             return {url: url, element: elements ? $(elements[index]) : null,
@@ -314,6 +467,12 @@
           })
         };
         pending = transaction;
+        if(aspectSelection && kind === "transition") {
+          transaction.candidates = transaction.slots.slice();
+          transaction.targetCount = targetCount;
+          pumpAspect(transaction);
+          return;
+        }
         transaction.slots.forEach(function(slot) {
           if(current(transaction)) loadSlot(transaction, slot);
         });
@@ -357,7 +516,7 @@
           if(count === 1 && canSplit(outgoing)) count = 2;
           else if(count === 2 && rowCount(outgoing) > 4) count = 1;
         }
-        var urls = reserve(count);
+        var urls = aspectSelection ? reserveAspect(count) : reserve(count);
         if(!urls.length && count === 2) {
           // Nine photos, or the last unused URL of a cycle, require a Single.
           var singles = boxes.filter(".single");
@@ -369,12 +528,13 @@
             if(!mergeable.length) return false;
             outgoing = $(mergeable.get(Math.floor(Math.random() * mergeable.length)));
           } else return false;
-          urls = reserve(1);
+          count = 1;
+          urls = aspectSelection ? reserveAspect(1) : reserve(1);
         }
         if(!urls.length && dynamic.enabled && acknowledgeHeldPhotos()) return frame();
         if(!urls.length) return false;
         clearTimer();
-        startTransaction("transition", urls, null, outgoing);
+        startTransaction("transition", urls, null, outgoing, count);
         schedule();
         return true;
       }
@@ -402,14 +562,26 @@
 
       function update(event, nextImages) {
         nextImages = Array.isArray(nextImages) ? nextImages : [];
+        // The cold Spotify fallback may still be loading when its manifest arrives.
+        // Reset this wholly replaced source even before a foreign photo is visible.
+        var resetSource = aspectSelection && nextImages.length > 0 && queue.stats().albumSize > 0 &&
+          !nextImages.some(function(url) { return !!members[url]; });
         queue.setImages(nextImages);
         updateMembers(nextImages);
-        if(dynamic.enabled) {
+        if(aspectSelection) {
+          cacheOrder = cacheOrder.filter(function(url) {
+            if(members[url]) return true;
+            delete aspectCache[url];
+            return false;
+          });
+          Object.keys(deferred).forEach(function(url) { if(!members[url]) delete deferred[url]; });
+        }
+        if(dynamic.enabled || aspectSelection) {
           var visible = visibleURLs(), stableCount = rowPhotoCounts().reduce(function(sum, count) { return sum + count; }, 0);
           var foreign = visible.some(function(url) { return !members[url]; });
           // If a smaller source cannot support this topology with spare URLs,
           // reset only when necessary. A normal refresh retains queue history.
-          if(foreign || (stableCount > 8 && queue.stats().albumSize - stableCount < 2) ||
+          if(foreign || resetSource || (stableCount > 8 && queue.stats().albumSize - stableCount < 2) ||
             (queue.stats().albumSize < 8 && stableCount)) {
             generation++;
             cancelPending();
@@ -418,6 +590,10 @@
             where.children(".row").remove();
             where.children(".loading").remove();
             queue = window.ShiftingTilesAlbumQueue.create(nextImages);
+            if(aspectSelection) {
+              deferred = Object.create(null);
+              aspectCycle = queue.stats().cycle;
+            }
             completedSinceChange = dynamic.minTransitionsBetweenChanges;
           }
         }
@@ -428,7 +604,7 @@
           clearPhotos();
           return;
         }
-        if(pending && pending.slots.some(function(slot) { return !members[slot.url]; })) cancelPending();
+        if(pending && (pending.candidates || pending.slots).some(function(slot) { return !members[slot.url]; })) cancelPending();
         if(!initialReady && !pending && !active) fillInitial();
         schedule();
       }
@@ -440,6 +616,7 @@
         clearTimer();
         cancelPending();
         finishAnimation();
+        aspectCache = Object.create(null); cacheOrder = []; deferred = Object.create(null);
         where.off(namespace);
         $(document).off(namespace);
         $(document.body).off(namespace);
@@ -455,6 +632,13 @@
           state.rowPhotoCounts = rowPhotoCounts();
           state.structureChanges = structureChanges;
           state.dynamicRowsEnabled = dynamic.enabled;
+          if(aspectSelection) {
+            state.aspectSelectionEnabled = true;
+            state.aspectMetadataEntries = cacheOrder.length;
+            state.aspectDeferrals = $.extend({}, deferred);
+            state.aspectCandidates = pending && pending.candidates ?
+              pending.candidates.map(function(slot) { return slot.url; }) : [];
+          }
           return state;
         },
         frame: frame,

@@ -199,6 +199,7 @@
           initialized = true;
           var playbackOptions = { fallbackPhotos: fallback.slice() };
           if (config.dynamicRows) playbackOptions.dynamicRows = config.dynamicRows;
+          if (config.aspectSelection === true) playbackOptions.aspectSelection = true;
           $gallery.shiftingtiles(images.slice(), playbackOptions);
         } else {
           // Replace the photo source in-place; do not duplicate animation timers/events.

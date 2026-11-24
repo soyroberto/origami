@@ -30,7 +30,7 @@ test('mount forwards dynamicRows only on initial playback, preserving isolated s
   const f = fixture();
   try {
     const dynamicRows = {enabled:true, probability:0.25, minTransitionsBetweenChanges:3, minTileWidth:160, minTileHeight:100};
-    const config = {libraryId:'instagram', dynamicRows};
+    const config = {libraryId:'instagram', dynamicRows, aspectSelection:true};
     const controller = f.w.ShiftingTilesPhotos.mount(f.gallery, ['foreign/spotify.jpg'], config);
     assert.equal(f.starts.length, 0);
     assert.equal(f.requests.length, 1);
@@ -38,6 +38,7 @@ test('mount forwards dynamicRows only on initial playback, preserving isolated s
     f.requests[0].success({version:1,images:f.images}, 'success');
     assert.equal(f.starts.length, 1);
     assert.equal(f.starts[0].options.dynamicRows, dynamicRows);
+    assert.equal(f.starts[0].options.aspectSelection, true);
     assert.deepEqual(Array.from(f.starts[0].options.fallbackPhotos), []);
     assert.deepEqual(f.starts[0].images, f.images);
     assert.equal(f.w.ShiftingTilesPhotos.mount(f.gallery, [], config), controller);
@@ -80,6 +81,7 @@ test('root enables a moderate configurable split cadence without extra controls'
     assert.equal(mounts[0].dynamicRows.minTileWidth, 160);
     assert.equal(mounts[0].dynamicRows.minTileHeight, 100);
     assert.equal(mounts[0].refreshMs, 60000);
+    assert.equal(mounts[0].aspectSelection, true);
     assert.equal(w.document.querySelectorAll('a,button,input').length, 0);
   } finally { dom.window.close(); }
 });

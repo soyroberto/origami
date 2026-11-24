@@ -66,13 +66,13 @@ html, body {
 		position: relative;
 		isolation: isolate;
 		overflow: hidden;
-		background-color: #242424;
-		/* Both layers inherit the single image set by the existing loader. */
+		background-color: transparent;
+		/* One principal photo only: no duplicated or blurred background layer. */
 		background-size: 0 0;
 		background-position: center;
 		background-repeat: no-repeat;
 
-		&::before, &::after {
+		&::after {
 			content: "";
 			position: absolute;
 			top: 0;
@@ -84,21 +84,10 @@ html, body {
 			background-repeat: no-repeat;
 			pointer-events: none;
 		}
-		&::before {
-			/* Overscan keeps transparent blur edges outside the visible tile. */
-			top: -48px;
-			right: -48px;
-			bottom: -48px;
-			left: -48px;
-			z-index: 0;
-			background-size: cover;
-			-webkit-filter: blur(16px);
-			filter: blur(16px);
-		}
 		&::after {
 			z-index: 1;
-			/* Show every edge of the principal photo without changing its ratio. */
-			background-size: contain;
+			/* Approved A: fill the cell by cropping, never by stretching the photo. */
+			background-size: cover;
 		}
 	}
 

@@ -2,9 +2,9 @@
 
 Galería animada de fotos de OneDrive, basada en la implementación web de Shifting Tiles. Comienza con ocho fotos —cuatro por fila— y divide o compacta ocasionalmente algunos bloques para mostrar entre cuatro y seis fotos por fila, si el espacio y el álbum lo permiten. Conserva las transiciones Single/Duo y las bibliotecas separadas. El publicador incremental convierte HEIC/HEIF a JPEG para los navegadores, sin modificar los originales OneDrive.
 
-La versión tiene una única definición en `version.js`: **0.9.4**. Su etiqueta es `v0.9.4`; la presentación abreviada es **Origami 0.9**. Las etiquetas históricas `v0.9.0` a `v0.9.3` permanecen intactas.
+La versión tiene una única definición en `version.js`: **0.9.5**. Su etiqueta es `v0.9.5`; la presentación abreviada es **Origami 0.9**. Las etiquetas históricas `v0.9.0` a `v0.9.4` permanecen intactas.
 
-Las filas usan una medida de ancho común y pueden tener distintas combinaciones y cantidades de bloques, sin imponer tres columnas idénticas. El arranque evalúa particiones modulares pequeñas; después conserva grupos y módulos al redimensionar. Los bloques Duo comparten el eje de sus dos fotos. Las líneas se desplazan durante la animación y recuperan la cuadrícula al terminar; las fotos siguen completas y el relleno y los bordes permanecen sin cambios.
+Las filas usan una medida de ancho común y pueden tener distintas combinaciones y cantidades de bloques, sin imponer tres columnas idénticas. El arranque evalúa particiones modulares pequeñas; después conserva grupos y módulos al redimensionar. Los bloques Duo comparten el eje de sus dos fotos. Las líneas se desplazan durante la animación y recuperan la cuadrícula al terminar; las casillas se llenan con una sola foto sin relleno desenfocado, usando `cover`: puede recortar sus bordes, pero no deforma la imagen. Los separadores permanecen sin cambios.
 
 ## Código y configuración
 
@@ -23,7 +23,7 @@ Se reutilizan los recursos existentes. Direcciones del sitio:
 - Galería: https://saauxfotos.z26.web.core.windows.net/
 - Acerca de: https://saauxfotos.z26.web.core.windows.net/acercade
 
-No se añade ninguna liga desde la raíz a `/acercade`, ni texto permanente sobre las fotografías. Las divisiones se configuran en `index.html` mediante `dynamicRows`; consulta [reproducción de álbumes](docs/album-playback.md). Las sombras, el relleno y los bordes actuales no se rediseñaron en esta actualización.
+No se añade ninguna liga desde la raíz a `/acercade`, ni texto permanente sobre las fotografías. Las divisiones se configuran en `index.html` mediante `dynamicRows`; consulta [reproducción de álbumes](docs/album-playback.md). La opción A fue aprobada visualmente: se elimina el relleno desenfocado y se permiten recortes para llenar las casillas. Se favorecen fotos de proporción cercana entre un conjunto acotado de candidatas, sin relegar indefinidamente otros formatos. No se incorpora todavía un administrador de bibliotecas.
 
 ## Desarrollo
 

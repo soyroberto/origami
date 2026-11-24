@@ -68,7 +68,7 @@ test('compiled LESS sizes the gallery to the viewport and removes page scroll', 
   assert.match(rules.compiledCSS, /height:\s*100vh;\s*height:\s*100dvh;/, '100vh fallback precedes the dynamic viewport override');
 });
 
-test('compiled LESS layers each dynamic tile image as blurred cover plus contained full photo', async () => {
+test('compiled LESS fills each cell with one cover photo and no blurred layer', async () => {
   const rules = await compiledRules();
   for (const selector of ['.shiftingtiles > .row .single', '.shiftingtiles > .row .dual > div']) {
     assert.equal(declaration(rules, selector, 'background-size'), '0 0');
@@ -77,13 +77,12 @@ test('compiled LESS layers each dynamic tile image as blurred cover plus contain
     assert.equal(declaration(rules, selector, 'overflow'), 'hidden');
   }
   for (const selector of ['.shiftingtiles > .row .single::before', '.shiftingtiles > .row .dual > div::before']) {
-    assert.equal(declaration(rules, selector, 'background-image'), 'inherit');
-    assert.equal(declaration(rules, selector, 'background-size'), 'cover');
-    assert.equal(declaration(rules, selector, 'filter'), 'blur(16px)');
+    assert.equal(matchingRules(rules, selector).length, 0);
+    assert.doesNotMatch(rules.compiledCSS, /blur\(|filter:/);
   }
   for (const selector of ['.shiftingtiles > .row .single::after', '.shiftingtiles > .row .dual > div::after']) {
     assert.equal(declaration(rules, selector, 'background-image'), 'inherit');
-    assert.equal(declaration(rules, selector, 'background-size'), 'contain');
+    assert.equal(declaration(rules, selector, 'background-size'), 'cover');
     assert.equal(declaration(rules, selector, 'background-position'), 'center');
     assert.equal(declaration(rules, selector, 'background-repeat'), 'no-repeat');
   }
