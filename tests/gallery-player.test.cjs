@@ -67,6 +67,10 @@ const rowCounts = f => Array.from(f.g.children('.row')).map(row => f.$(row).chil
   .reduce((n, group) => n + (f.$(group).hasClass('dual') ? 2 : 1), 0));
 const photoLeaves = f => f.g.children('.row').children('.single,.dual').not('.disappear').toArray()
   .flatMap(group => f.$(group).hasClass('dual') ? Array.from(group.children) : [group]);
+function leafHeight(leaf, innerHeight) {
+  const calc = /^calc\(50% ([+-]) 5px\)$/.exec(leaf.style.height);
+  return calc ? innerHeight / 2 + (calc[1] === '+' ? 5 : -5) : parseFloat(leaf.style.height) / 100 * innerHeight;
+}
 
 function geometryFixture(counts = [5, 6], variant = 0, unknownChildren = false) {
   const f = fixture(), calls = [];
@@ -98,7 +102,7 @@ function geometryFixture(counts = [5, 6], variant = 0, unknownChildren = false) 
             leaf.getBoundingClientRect = () => {
               const height = row.getBoundingClientRect().height;
               return { width: group.getBoundingClientRect().width - 10,
-                height: unknownChildren ? 0 : leaf.style.height ? parseFloat(leaf.style.height) / 100 * (height - 10) :
+                height: unknownChildren ? 0 : leaf.style.height ? leafHeight(leaf, height - 10) :
                   c ? height - 10 - (height - 20) * 0.42 : (height - 20) * 0.42 };
             };
             group.appendChild(leaf);
@@ -133,9 +137,11 @@ function verifyDomGeometry(f, counts, W, H) {
       assert.equal(group.style.getPropertyValue('--st-box-width'), group.style.getPropertyValue('--st-start-width'));
       assert.ok(group.getBoundingClientRect().width > 10);
       if (f.$(group).hasClass('dual')) {
-        near(Array.from(group.children).reduce((n, leaf) => n + parseFloat(leaf.style.height), 0), 100);
-        assert.ok(parseFloat(group.children[0].style.height) > 0);
-        assert.ok(parseFloat(group.children[1].style.height) / 100 * (height - 10) > 10);
+        const heights = Array.from(group.children).map(leaf => leafHeight(leaf, height - 10));
+        near(heights.reduce((n, h) => n + h, 0), height - 10);
+        assert.ok(heights[0] > 0);
+        assert.ok(heights[1] > 10);
+        near(heights[0], heights[1] - 10);
       }
     });
   });
@@ -165,16 +171,16 @@ test('DOM geometry handles every 4/5/6 row combination on desktop, tablet and mo
   }
 });
 
-test('unmeasured Duo children keep outer widths and derive inverse-aspect heights', () => {
+test('unmeasured Duo children retain source identity and derive a common horizontal axis', () => {
   const f = geometryFixture([5, 6], 0, true);
   try {
     const c = player.attach(f.g); f.flush();
     assert.ok(f.calls[0].current, 'outer geometry remains available');
     assert.ok(f.calls[0].current.rows.some(row => row.groups.some(group => group.type === 'dual' && group.childHeights == null)));
     verifyDomGeometry(f, [5, 6], 1600, 800);
-    const result = c.metrics(), ratios = f.calls[0].rows.flatMap(row => row.flatMap(group => group.ratios));
+    const result = c.metrics();
     result.rows.forEach(row => row.groups.filter(group => group.type === 'dual').forEach(group => {
-      near(group.childHeights[0] * ratios[group.photoIndices[0]], (group.childHeights[1] - 10) * ratios[group.photoIndices[1]]);
+      near(group.childHeights[0], group.childHeights[1] - 10);
     }));
     c.destroy();
   } finally { f.dom.window.close(); }
@@ -235,7 +241,10 @@ test('initial variable snapshots and resize reject mid-animation DOM then begin 
     incoming[0].style.backgroundImage = `url("${url}")`;
     incoming.data('st-photo-url', url).data('st-natural-width', 130).data('st-natural-height', 100)
       .data('st-image-request', marker).data('st-image-loaded-request', marker);
-    incoming[0].getBoundingClientRect = outgoing[0].getBoundingClientRect;
+    incoming[0].getBoundingClientRect = function () {
+      return { width: parseFloat(this.style.getPropertyValue('--st-box-width')) / 50 * f.g[0].clientWidth,
+        height: this.parentElement.getBoundingClientRect().height - 10 };
+    };
     outgoing.addClass('disappear').parent().append(incoming);
     f.state.animating = true;
     const c = player.attach(f.g); f.flush(); assert.equal(f.calls.length, 0);

@@ -242,12 +242,131 @@
     return result;
   }
 
+  // Shared modules constrain the grid, not the number or identity of its boxes.
+  // Keep the legacy planner below available for its original callers.
+  function modularPlan(input, width, height, current, options) {
+    var previous = current == null ? null : currentRows(current, width, height, input.ratios);
+    var identity = previous ? previous.map(function (row) {
+      return row.groups.map(function (g) { return group(g.photoIndices); });
+    }) : input.identity;
+    var preserve = !!options.preserveTopology || input.ratios.length !== 8;
+    var reference = positions(identity), evaluated = 0;
+
+    function allowed(shape) {
+      return preserve || !options.requireSingle || shape.some(function (row) {
+        return row.some(function (g) { return g.type === 'single'; });
+      });
+    }
+    function widths(n, units) {
+      var choices = [], bounds = BOUNDS[n];
+      function visit(parts, left) {
+        if (parts.length === n) {
+          if (!left) choices.push(parts);
+          return;
+        }
+        var remaining = n - parts.length - 1;
+        for (var span = 1; span <= left - remaining; span++) {
+          var fraction = span / units;
+          if (fraction >= bounds[0] && fraction <= bounds[1] && width * fraction > BORDER) {
+            visit(parts.concat(span), left - span);
+          }
+        }
+      }
+      visit([], units);
+      return choices;
+    }
+    function geometry(shape, spans, units) {
+      return shape.map(function (row, r) {
+        var h = r ? height - height / 2 : height / 2, used = 0;
+        return { height: h, groups: row.map(function (g, j) {
+          var w = j === row.length - 1 ? width - used : width * spans[r][j] / units;
+          used += w;
+          var first = (h - BORDER - GAP) / 2;
+          if (w <= BORDER || h <= BORDER || (g.type === 'dual' && first <= 0)) {
+            throw new RangeError('Canvas is too small for positive modular photo boxes.');
+          }
+          return { type: g.type, photoIndices: g.photoIndices.slice(), width: w, span: spans[r][j],
+            childHeights: g.type === 'single' ? [h - BORDER] : [first, h - BORDER - first] };
+        }) };
+      });
+    }
+    function entry(shape, spans, units) {
+      var result;
+      try { result = measure(geometry(shape, spans, units), input.ratios, width, height); }
+      catch (error) { if (error instanceof RangeError) return null; throw error; }
+      evaluated++;
+      result.modularUnits = units;
+      return { result: result, key: key(shape), distance: distance(shape, reference), units: units };
+    }
+    function better(candidate, old) {
+      return candidate && (!old || candidate.result.quality > old.result.quality + TIE ||
+        (Math.abs(candidate.result.quality - old.result.quality) <= TIE &&
+          (candidate.distance < old.distance ||
+            (candidate.distance === old.distance && Math.abs(candidate.units - 5) < Math.abs(old.units - 5)))));
+    }
+    function contiguous(row) {
+      var indices = [].concat.apply([], row.map(function (g) { return g.photoIndices; })), shapes = [];
+      function visit(parts, start) {
+        if (start === indices.length) { if (parts.length >= 2 && parts.length <= 4) shapes.push(parts); return; }
+        if (parts.length === 4) return;
+        for (var count = 1; count <= 2 && start + count <= indices.length; count++) {
+          visit(parts.concat([group(indices.slice(start, start + count))]), start + count);
+        }
+      }
+      visit([], 0);
+      return shapes;
+    }
+
+    var kept = null, knownUnits = current && current.modularUnits;
+    if (previous && [4, 5, 6].indexOf(knownUnits) !== -1 && allowed(identity)) {
+      var knownSpans = current.rows.map(function (row) { return row.groups.map(function (g) { return g.modularSpan; }); });
+      if (knownSpans.every(function (row) {
+        return sum(row) === knownUnits && row.every(function (span) { return Number.isInteger(span) && span > 0; });
+      })) kept = entry(identity, knownSpans, knownUnits);
+    }
+
+    var best = kept, bestIdentity = kept;
+    if (!preserve || !kept) {
+      var first = preserve ? [identity[0]] : contiguous(identity[0]);
+      var second = preserve ? [identity[1]] : contiguous(identity[1]);
+      [4, 5, 6].forEach(function (units) {
+        first.forEach(function (top) { second.forEach(function (bottom) {
+          var shape = [top, bottom];
+          if (!allowed(shape)) return;
+          var a = widths(top.length, units), b = widths(bottom.length, units);
+          a.forEach(function (s0) { b.forEach(function (s1) {
+            var candidate = entry(shape, [s0, s1], units);
+            if (better(candidate, best)) best = candidate;
+            if (key(shape) === key(identity) && better(candidate, bestIdentity)) bestIdentity = candidate;
+          }); });
+        }); });
+      });
+    }
+    if (!best) throw new RangeError('Canvas is too small for positive modular photo boxes.');
+    var chosen = best;
+    // Content replacement and resizing must not reshuffle a good modular grid.
+    if (kept && best.result.quality - kept.result.quality < MATERIAL) chosen = kept;
+    else if (bestIdentity && best.key !== key(identity) && best.result.quality - bestIdentity.result.quality < MATERIAL) chosen = bestIdentity;
+    var reordered = chosen.key !== key(identity), result = chosen.result;
+    result.diagnostics = { decision: preserve ? 'modular-preserved-topology' : reordered ? 'modular-repack' : 'modular-identity-fit',
+      reordered: reordered, preserveTopology: preserve, alignment: 'shared-modules', partitions: 0,
+      packingCandidates: preserve ? 0 : evaluated, shortlistCount: 0, shortlistLimit: 0,
+      evaluatedLayouts: evaluated, widthSolves: 0, boundedChecks: 0, heightSamples: 1,
+      materialThreshold: MATERIAL, bestQuality: best.result.quality,
+      identityQuality: bestIdentity ? bestIdentity.result.quality : null,
+      oldCurrent: previous ? (function () { var old = measure(previous, input.ratios, width, height);
+        return { coverage: old.coverage, meanFill: old.meanFill, minFill: old.minFill, rowFill: old.rowFill, quality: old.quality };
+      }()) : null };
+    return result;
+  }
+
   function plan(rows, width, height, currentLayout, options) {
     var requireSingle = options && options.requireSingle;
     function permitted(shape) {
       return !requireSingle || shape.some(function (row) { return row.some(function (g) { return g.type === 'single'; }); });
     }
     var input = readInput(rows, width, height), ratios = input.ratios;
+    if (options && options.modularLayout) return modularPlan(input, width, height, currentLayout, options);
     var oldRows = currentLayout == null ? null : currentRows(currentLayout, width, height, ratios);
     var identity = oldRows ? oldRows.map(function (row) { return row.groups.map(function (g) { return group(g.photoIndices); }); }) : input.identity;
     // Dynamic rows never enter the eight-photo combinatorial optimizer. Resizing

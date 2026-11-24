@@ -56,6 +56,7 @@
 
       function duoHeights(size, slots) {
         var usable = size.height - 20;
+        if(where.hasClass('gallery-modular')) return [usable / 2, usable / 2 + 10];
         var firstWeight = slots[0].height / slots[0].width;
         var secondWeight = slots[1].height / slots[1].width;
         var first = usable * firstWeight / (firstWeight + secondWeight);
@@ -92,7 +93,8 @@
           incoming[0].style.width = "var(--st-box-width)";
         }
         if(heights && size.height > 20) incoming.children("div").each(function(index) {
-          this.style.height = (heights[index] / (size.height - 10) * 100) + "%";
+          this.style.height = where.hasClass('gallery-modular') ?
+            (index ? 'calc(50% + 5px)' : 'calc(50% - 5px)') : (heights[index] / (size.height - 10) * 100) + "%";
         });
         return incoming;
       }

@@ -1,5 +1,13 @@
 # Historial de versiones
 
+## 0.9.4 — 2026-11-24
+
+Se recupera un patrón modular común entre las filas, basado en la referencia original: los bloques ocupan múltiplos de una misma medida de ancho y cada fila puede combinarlos de distinta manera o tener distinta cantidad de grupos. No se imponen tres columnas idénticas. Los bloques Duo comparten un eje horizontal y las dos filas ocupan mitades de la altura disponible.
+
+El ajuste puede agrupar fotos contiguas al arranque; después conserva identidades, bloques y módulos al redimensionar. Se mantienen las transiciones flotantes, el intervalo de cinco segundos, la precarga atómica, las cuatro a seis fotos por fila, el recorrido completo del álbum y las bibliotecas separadas. La prueba local fue revisada y aprobada visualmente por el propietario antes de autorizar producción.
+
+Esta versión parte de la recuperación exacta de 0.9.1. Las etiquetas y commits de 0.9.2 y 0.9.3 se conservan en el historial, sin reutilizarlos. Las fotos completas (`contain`), sombras y relleno borroso, separadores, backend, OneDrive, workflow y recursos Azure permanecen sin cambios; la eliminación de sombras se reserva para la siguiente versión.
+
 ## 0.9.1 — 2026-11-23
 
 Los bloques Single/Duo pueden dividirse y compactarse ocasionalmente durante la sustitución normal: cuatro, cinco o seis fotos por fila, con ocho a doce en reposo. La probabilidad y el intervalo mínimo entre cambios estructurales se configuran en el arranque. Las divisiones respetan el espacio útil y la disponibilidad de fotos únicas; los álbumes pequeños conservan el comportamiento anterior.

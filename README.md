@@ -2,7 +2,9 @@
 
 Galería animada de fotos de OneDrive, basada en la implementación web de Shifting Tiles. Comienza con ocho fotos —cuatro por fila— y divide o compacta ocasionalmente algunos bloques para mostrar entre cuatro y seis fotos por fila, si el espacio y el álbum lo permiten. Conserva las transiciones Single/Duo y las bibliotecas separadas. El publicador incremental convierte HEIC/HEIF a JPEG para los navegadores, sin modificar los originales OneDrive.
 
-La versión tiene una única definición en `version.js`: **0.9.1**. Su etiqueta es `v0.9.1`; la presentación abreviada es **Origami 0.9**. La etiqueta histórica `v0.9.0` permanece intacta.
+La versión tiene una única definición en `version.js`: **0.9.4**. Su etiqueta es `v0.9.4`; la presentación abreviada es **Origami 0.9**. Las etiquetas históricas `v0.9.0` a `v0.9.3` permanecen intactas.
+
+Las filas usan una medida de ancho común y pueden tener distintas combinaciones y cantidades de bloques, sin imponer tres columnas idénticas. El arranque evalúa particiones modulares pequeñas; después conserva grupos y módulos al redimensionar. Los bloques Duo comparten el eje de sus dos fotos. Las líneas se desplazan durante la animación y recuperan la cuadrícula al terminar; las fotos siguen completas y el relleno y los bordes permanecen sin cambios.
 
 ## Código y configuración
 

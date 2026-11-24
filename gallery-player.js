@@ -10,6 +10,7 @@
   function attach($gallery) {
     var gallery = $gallery[0], win = gallery.ownerDocument.defaultView;
     var $ = $gallery.constructor, namespace = '.stableLayout' + (++serial);
+    $gallery.addClass('gallery-modular');
     var needsFit = true, raf = null, destroyed = false, observer = null;
     var lastWidth = 0, lastHeight = 0, last = null, fits = 0;
     var preserveTopology = false, structureBaseline = 0;
@@ -57,7 +58,8 @@
           }
           row.push({ type: type, ratios: ratios });
           groups.push({ node: this, indices: indices, type: type });
-          geometry.push({ type: type, photoIndices: indices, width: this.getBoundingClientRect().width, childHeights: childHeights });
+          geometry.push({ type: type, photoIndices: indices, width: this.getBoundingClientRect().width, childHeights: childHeights,
+            modularSpan: Number(this.style.getPropertyValue('--st-grid-span')) || null });
         });
         if (count < 4 || count > 6 || row.length < 2 || row.length > 4) ready = false;
         rows.push(row);
@@ -72,7 +74,8 @@
             (g.childHeights == null || (g.childHeights.every(positive) && (g.type !== 'dual' || g.childHeights[1] > 10)));
         });
       });
-      return { rows: rows, photos: photos, nodes: nodes, current: validMeasurements ? { rows: measured } : null };
+      return { rows: rows, photos: photos, nodes: nodes,
+        current: validMeasurements ? { rows: measured, modularUnits: $gallery.data('st-modular-units') } : null };
     }
 
     function populate(node, photo) {
@@ -105,6 +108,7 @@
         });
       });
       $gallery.addClass('gallery-balanced');
+      if (plan.modularUnits) $gallery.data('st-modular-units', plan.modularUnits);
       plan.rows.forEach(function (row, r) {
         var parent = input.nodes[r].node;
         parent.style.height = (row.height / gallery.clientHeight * 100) + '%';
@@ -112,8 +116,10 @@
           var group = row.groups[g], width = (group.width / gallery.clientWidth * 50) + '%';
           node.style.setProperty('--st-box-width', width);
           node.style.setProperty('--st-start-width', width);
+          if (group.span) node.style.setProperty('--st-grid-span', String(group.span));
           if (group.type === 'dual') Array.from(node.children).forEach(function (leaf, c) {
-            leaf.style.height = (group.childHeights[c] / (row.height - 10) * 100) + '%';
+            leaf.style.height = plan.modularUnits ? (c ? 'calc(50% + 5px)' : 'calc(50% - 5px)') :
+              (group.childHeights[c] / (row.height - 10) * 100) + '%';
           });
         });
       });
@@ -142,9 +148,16 @@
       // A nine-photo album only has one spare URL: keep Single boxes available.
       if (preserveTopology || !state || state.albumSize >= 10) {
         var plan = win.ShiftingTilesLayout.plan(input.rows, width, height, input.current,
-          { requireSingle: true, preserveTopology: preserveTopology });
+          { requireSingle: true, preserveTopology: preserveTopology, modularLayout: true });
         apply(plan, input);
+        // Only a recreated source may regroup again; resizing scales this grid.
+        if (plan.modularUnits) preserveTopology = true;
       } else {
+        // Small albums retain the original 40/40/20 grid and their Single boxes.
+        // Only normalize the Duo axis; live calc also covers active resizing.
+        $gallery.children('.row').children('.dual').each(function () {
+          Array.from(this.children).forEach(function (leaf, c) { leaf.style.height = c ? 'calc(50% + 5px)' : 'calc(50% - 5px)'; });
+        });
         last = { fits: ++fits, width: width, height: height, rearranged: false, smallAlbum: true };
       }
       lastWidth = width;
@@ -172,6 +185,7 @@
       var state = playback && playback.stats ? playback.stats() : null;
       structureBaseline = state && state.structureChanges || 0;
       preserveTopology = false;
+      $gallery.removeData('st-modular-units');
       needsFit = true;
       schedule();
     }
