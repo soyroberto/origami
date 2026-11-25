@@ -1,0 +1,21 @@
+[hidden] { display: none !important; }
+body { color: #edf0f2; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+.access-panel { min-height: 100dvh; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 28px; overflow: auto; }
+.access-card { max-width: 470px; width: 100%; }
+.eyebrow { color: #8fa5ab; font-size: 12px; font-weight: 650; letter-spacing: .15em; }
+h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.12; font-weight: 600; margin: 16px 0; }
+p { line-height: 1.6; }
+#auth-status { border-left: 2px solid #8fa5ab; padding-left: 14px; min-height: 26px; }
+.access-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+button { background: #f0f2f2; color: #12191b; border: 1px solid #f0f2f2; border-radius: 8px; padding: 13px 18px; font: inherit; font-weight: 550; cursor: pointer; }
+button:hover { background: #d8e1e2; }
+button:focus-visible { outline: 3px solid #8fa5ab; outline-offset: 4px; }
+button:disabled { opacity: .45; cursor: wait; }
+#sign-in-microsoft { background: #111719; color: #edf0f2; border-color: #506166; }
+#sign-in-microsoft:hover { background: #202b2e; }
+.identity { font-size: 12px; word-break: break-word; color: #aebdc1; }
+.access-note { font-size: 12px; color: #8f9da1; margin-top: 30px; }
+.gallery-controls { position: fixed; z-index: 200; top: 12px; right: 12px; opacity: .25; transition: opacity .15s; }
+.gallery-controls:hover, .gallery-controls:focus-within { opacity: 1; }
+.gallery-controls button { padding: 7px 11px; font-size: 12px; background: #111b; color: #eee; border-color: #666; }
+@media (max-height: 560px) { .access-panel { align-items: flex-start; height: 100dvh; } }

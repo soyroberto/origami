@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="application-name" content="Origami beta">
+  <title>Origami · Prueba de acceso</title>
+  <link rel="stylesheet/less" href="/shiftingtiles.less">
+  <link rel="stylesheet" href="/auth.css">
+  <script src="/version.js" defer></script>
+  <script src="/jquery-1.8.3.js" defer></script>
+  <script src="/album-queue.js" defer></script>
+  <script src="/shiftingtiles.js" defer></script>
+  <script src="/gallery-layout.js" defer></script>
+  <script src="/gallery-player.js" defer></script>
+  <script src="/gallery-source.js" defer></script>
+  <script src="/less-2.5.1.min.js" defer></script>
+  <script src="/vendor/supabase.js" defer></script>
+  <script src="/auth-client.js" defer></script>
+</head>
+<body>
+  <main id="access-panel" class="access-panel">
+    <section class="access-card" aria-labelledby="access-title">
+      <p class="eyebrow">ORIGAMI · BETA LOCAL</p>
+      <h1 id="access-title">Acceso a tus fotos</h1>
+      <p>Identifícate con tu cuenta habitual. Solo las personas autorizadas pueden abrir la galería de prueba.</p>
+      <p id="auth-status" role="status" aria-live="polite">Comprobando configuración…</p>
+      <div class="access-actions">
+        <button id="sign-in-google" type="button" disabled>Continuar con Google</button>
+        <button id="sign-in-microsoft" type="button" disabled>Continuar con Microsoft</button>
+        <button id="check-access" type="button" hidden>Comprobar permiso</button>
+        <button id="sign-out" type="button" hidden>Cerrar sesión</button>
+      </div>
+      <p id="auth-identity" class="identity" hidden></p>
+      <p class="access-note">Prueba con ocho muestras locales. Esta versión no modifica la sincronización ni vuelve privadas las fotos del sitio público.</p>
+    </section>
+  </main>
+  <div class="gallery" id="private-gallery" hidden aria-label="Galería de prueba autorizada"></div>
+  <nav id="gallery-controls" class="gallery-controls" hidden aria-label="Controles de sesión">
+    <button id="gallery-sign-out" type="button">Cerrar sesión</button>
+  </nav>
+</body>
+</html>

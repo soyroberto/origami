@@ -4,12 +4,16 @@
   "description": "Development tooling for the Origami OneDrive gallery; not a published npm package.",
   "scripts": {
     "test": "node --test tests/*.test.cjs",
-    "test:package": "python3 -m unittest discover -s tests -p 'test_*.py'"
+    "test:package": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "beta:build": "esbuild node_modules/@supabase/supabase-js/dist/index.mjs --bundle --platform=browser --format=iife --global-name=supabase --outfile=beta/vendor/supabase.js",
+    "beta": "npm run beta:build && node beta/server.cjs"
   },
   "engines": {
     "node": ">=20.19.0"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "2.119.2",
+    "esbuild": "0.28.2",
     "jsdom": "27.0.1"
   }
 }

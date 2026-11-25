@@ -17,3 +17,13 @@ __pycache__/
 *.pyc
 msal-cache.json
 node_modules/
+
+# Isolated authentication beta: local values, access grants and generated SDK.
+.env.*
+!.env.example
+beta/config.local.json
+beta/authorized-users.local.json
+beta/seen-users.local.json
+beta/*.local.json.lock
+beta/.*.local.json.*.tmp
+beta/vendor/
